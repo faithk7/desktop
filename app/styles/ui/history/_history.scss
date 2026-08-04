@@ -52,11 +52,24 @@
     .select-component {
       align-items: center;
       display: flex;
+      flex-direction: row;
       gap: var(--spacing-half);
+      min-width: 0;
+      width: 100%;
 
       label {
         color: var(--text-secondary-color);
         font-size: var(--font-size-sm);
+        margin-bottom: 0;
+        min-width: 0;
+        white-space: nowrap;
+      }
+
+      select {
+        flex: none;
+        margin-left: auto;
+        min-width: 110px;
+        width: auto;
       }
     }
   }

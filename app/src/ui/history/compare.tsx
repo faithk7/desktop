@@ -216,7 +216,7 @@ export class CompareSidebar extends React.Component<
     return (
       <div className="commit-history-order-selector">
         <Select
-          label="Commit history order"
+          label="Order"
           value={formState.order}
           disabled={this.state.isChangingHistoryOrder}
           onChange={this.onHistoryOrderChanged}

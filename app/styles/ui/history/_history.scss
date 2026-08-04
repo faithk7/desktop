@@ -40,6 +40,27 @@
     min-height: 0;
   }
 
+  .commit-history-order-selector {
+    align-items: center;
+    background: var(--box-alt-background-color);
+    border-bottom: var(--base-border);
+    display: flex;
+    flex: none;
+    justify-content: flex-end;
+    padding: var(--spacing-half);
+
+    .select-component {
+      align-items: center;
+      display: flex;
+      gap: var(--spacing-half);
+
+      label {
+        color: var(--text-secondary-color);
+        font-size: var(--font-size-sm);
+      }
+    }
+  }
+
   .merge-status {
     background: var(--background-color);
     border-width: 0 var(--spacing-half);

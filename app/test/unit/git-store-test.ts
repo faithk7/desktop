@@ -39,6 +39,38 @@ describe('GitStore', () => {
       assert.equal(commits.length, 100)
       assert.equal(commits[0], '708a46eac512c7b2486da2247f116d11a100b611')
     })
+
+    it('loads the true oldest commits across batches', async t => {
+      const path = await setupFixtureRepository(
+        t,
+        'repository-with-105-commits'
+      )
+      const repo = new Repository(path, -1, null, false)
+      const gitStore = new GitStore(repo, shell, new TestStatsStore())
+
+      const allCommits = await gitStore.loadCommitBatch('HEAD', 0)
+      assert(allCommits !== null)
+
+      const oldestBatch = await gitStore.loadOldestCommitBatch('HEAD', 0)
+      assert(oldestBatch !== null)
+      assert.equal(oldestBatch.length, 100)
+
+      const remainingBatch = await gitStore.loadOldestCommitBatch('HEAD', 100)
+      assert(remainingBatch !== null)
+      assert.equal(remainingBatch.length, 5)
+
+      const canonicalHistory = remainingBatch.concat(oldestBatch)
+      assert.deepStrictEqual(
+        canonicalHistory,
+        allCommits.concat((await gitStore.loadCommitBatch('HEAD', 100)) ?? [])
+      )
+
+      const displayedOldestFirst = [...canonicalHistory].reverse()
+      assert.equal(
+        displayedOldestFirst[0],
+        canonicalHistory[canonicalHistory.length - 1]
+      )
+    })
   })
 
   it('can discard changes from a repository', async t => {

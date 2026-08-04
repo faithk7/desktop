@@ -8,6 +8,7 @@ import {
 } from '../../models/status'
 import { Tip, TipState } from '../../models/tip'
 import {
+  CommitHistoryOrder,
   HistoryTabMode,
   IBranchesState,
   IChangesState,
@@ -409,6 +410,7 @@ function getInitialRepositoryState(): IRepositoryState {
     compareState: {
       formState: {
         kind: HistoryTabMode.History,
+        order: CommitHistoryOrder.NewestFirst,
       },
       tip: null,
       mergeStatus: null,

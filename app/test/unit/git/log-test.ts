@@ -1,12 +1,34 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
 import { Repository } from '../../../src/models/repository'
-import { getChangedFiles, getCommits } from '../../../src/lib/git'
-import { setupFixtureRepository } from '../../helpers/repositories'
+import {
+  getChangedFiles,
+  getCommitCount,
+  getCommits,
+} from '../../../src/lib/git'
+import {
+  setupEmptyRepository,
+  setupFixtureRepository,
+} from '../../helpers/repositories'
 import { AppFileStatusKind } from '../../../src/models/status'
 import { setupLocalConfig } from '../../helpers/local-config'
 
 describe('git/log', () => {
+  describe('getCommitCount', () => {
+    it('counts all commits reachable from HEAD', async t => {
+      const path = await setupFixtureRepository(t, 'test-repo-with-tags')
+      const repository = new Repository(path, -1, null, false)
+
+      assert.equal(await getCommitCount(repository, 'HEAD'), 5)
+    })
+
+    it('returns zero for an unborn repository', async t => {
+      const repository = await setupEmptyRepository(t)
+
+      assert.equal(await getCommitCount(repository, 'HEAD'), 0)
+    })
+  })
+
   describe('getCommits', () => {
     it('loads history', async t => {
       const testRepoPath = await setupFixtureRepository(

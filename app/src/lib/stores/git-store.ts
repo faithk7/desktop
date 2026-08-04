@@ -62,6 +62,7 @@ import {
   parseSingleUnfoldedTrailer,
   isCoAuthoredByTrailer,
   getAheadBehind,
+  getCommitCount,
   revRange,
   revSymmetricDifference,
   getConfigValue,
@@ -228,6 +229,46 @@ export class GitStore extends BaseStore {
     const commits = await this.performFailableOperation(() =>
       getCommits(this.repository, commitish, CommitBatchSize, skip)
     )
+
+    this.requestsInFight.delete(requestKey)
+    if (!commits) {
+      return null
+    }
+
+    this.storeCommits(commits)
+    return commits.map(c => c.sha)
+  }
+
+  /**
+   * Load the next batch from the oldest end of history while retaining the
+   * canonical newest-first order returned by git log.
+   */
+  public async loadOldestCommitBatch(
+    commitish: string,
+    loadedCount: number
+  ): Promise<ReadonlyArray<string> | null> {
+    if (this.requestsInFight.has(LoadingHistoryRequestKey)) {
+      return null
+    }
+
+    const requestKey = `history/compare/${commitish}/oldest/${loadedCount}`
+    if (this.requestsInFight.has(requestKey)) {
+      return null
+    }
+
+    this.requestsInFight.add(requestKey)
+
+    const commits = await this.performFailableOperation(async () => {
+      const totalCount = await getCommitCount(this.repository, commitish)
+      const batchSize = Math.min(CommitBatchSize, totalCount - loadedCount)
+
+      if (batchSize <= 0) {
+        return new Array<Commit>()
+      }
+
+      const skip = Math.max(totalCount - loadedCount - batchSize, 0)
+      return getCommits(this.repository, commitish, batchSize, skip)
+    })
 
     this.requestsInFight.delete(requestKey)
     if (!commits) {

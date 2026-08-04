@@ -148,6 +148,7 @@ import {
 } from '../api'
 import { shell } from '../app-shell'
 import {
+  CommitHistoryOrder,
   CompareAction,
   HistoryTabMode,
   Foldout,
@@ -292,6 +293,10 @@ import {
   setObject,
   getFloatNumber,
 } from '../local-storage'
+import {
+  getCommitHistoryOrder,
+  setCommitHistoryOrder,
+} from '../commit-history-order'
 import { ExternalEditorError, suggestedExternalEditor } from '../editors/shared'
 import { ApiRepositoriesStore } from './api-repositories-store'
 import {
@@ -1771,7 +1776,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
   public async _executeCompare(
     repository: Repository,
     action: CompareAction
-  ): Promise<void> {
+  ): Promise<boolean> {
     const gitStore = this.gitStoreCache.get(repository)
     const kind = action.kind
 
@@ -1798,22 +1803,27 @@ export class AppStore extends TypedBaseStore<IAppState> {
       if (
         tipIsUnchanged &&
         formState.kind === HistoryTabMode.History &&
+        formState.order === action.order &&
         commitSHAs.length > 0
       ) {
         // don't refresh the history view here because we know nothing important
         // has changed and we don't want to rebuild this state
-        return
+        return true
       }
 
       // load initial group of commits for current branch
-      const commits = await gitStore.loadCommitBatch('HEAD', 0)
+      const commits =
+        action.order === CommitHistoryOrder.OldestFirst
+          ? await gitStore.loadOldestCommitBatch('HEAD', 0)
+          : await gitStore.loadCommitBatch('HEAD', 0)
 
       if (commits === null) {
-        return
+        return false
       }
 
       const newState: IDisplayHistory = {
         kind: HistoryTabMode.History,
+        order: action.order,
       }
 
       this.repositoryStateCache.updateCompareState(repository, () => ({
@@ -1823,13 +1833,21 @@ export class AppStore extends TypedBaseStore<IAppState> {
         filterText: '',
         showBranchList: false,
       }))
-      this.updateOrSelectFirstCommit(repository, commits)
+      setCommitHistoryOrder(action.order)
 
-      return this.emitUpdate()
+      const displayCommits =
+        action.order === CommitHistoryOrder.OldestFirst
+          ? [...commits].reverse()
+          : commits
+      this.updateOrSelectFirstCommit(repository, displayCommits)
+
+      this.emitUpdate()
+      return true
     }
 
     if (action.kind === HistoryTabMode.Compare) {
-      return this.updateCompareToBranch(repository, action)
+      await this.updateCompareToBranch(repository, action)
+      return true
     }
 
     return assertNever(action, `Unknown action: ${kind}`)
@@ -1964,27 +1982,49 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
       const tip = state.branchesState.tip
 
-      let newCommits: string[] | null = null
+      let newCommits: ReadonlyArray<string> | null = null
 
-      // Prioritize pulling from the local commits if the last one we pulled is local
-      if (
-        commits.length > 0 &&
-        tip.kind === TipState.Valid &&
-        gitStore.localCommitSHAs.includes(commits[commits.length - 1])
-      ) {
-        newCommits = await gitStore.loadLocalCommits(tip.branch, commits.length)
-      }
+      if (formState.order === CommitHistoryOrder.OldestFirst) {
+        newCommits = await gitStore.loadOldestCommitBatch(
+          'HEAD',
+          commits.length
+        )
+      } else {
+        // Prioritize pulling from the local commits if the last one we pulled is local
+        if (
+          commits.length > 0 &&
+          tip.kind === TipState.Valid &&
+          gitStore.localCommitSHAs.includes(commits[commits.length - 1])
+        ) {
+          newCommits = await gitStore.loadLocalCommits(
+            tip.branch,
+            commits.length
+          )
+        }
 
-      if (!newCommits || newCommits.length === 0) {
-        newCommits = await gitStore.loadCommitBatch('HEAD', commits.length)
+        if (!newCommits || newCommits.length === 0) {
+          newCommits = await gitStore.loadCommitBatch('HEAD', commits.length)
+        }
       }
 
       if (!newCommits) {
         return
       }
 
+      const existingCommits = new Set(commits)
+      const uniqueNewCommits = newCommits.filter(
+        sha => !existingCommits.has(sha)
+      )
+
+      if (uniqueNewCommits.length === 0) {
+        return
+      }
+
       this.repositoryStateCache.updateCompareState(repository, () => ({
-        commitSHAs: commits.concat(newCommits),
+        commitSHAs:
+          formState.order === CommitHistoryOrder.OldestFirst
+            ? uniqueNewCommits.concat(commits)
+            : commits.concat(uniqueNewCommits),
       }))
       this.emitUpdate()
     }
@@ -4743,7 +4783,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
     // Make sure changes or suggested next step are visible after branch checkout
     await this._selectWorkingDirectoryFiles(repository)
 
-    this._initializeCompare(repository, { kind: HistoryTabMode.History })
+    this._initializeCompare(repository, {
+      kind: HistoryTabMode.History,
+      order: getCommitHistoryOrder(),
+    })
 
     if (defaultBranch !== null && branch.name !== defaultBranch.name) {
       this.statsStore.recordNonDefaultBranchCheckout()
@@ -10716,6 +10759,7 @@ function getInitialAction(
   if (cachedState.kind === HistoryTabMode.History) {
     return {
       kind: HistoryTabMode.History,
+      order: getCommitHistoryOrder(),
     }
   }
 

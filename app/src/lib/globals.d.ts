@@ -5,6 +5,9 @@ declare const __DEV__: boolean
 /** Is the app using dev secrets? */
 declare const __DEV_SECRETS__: boolean
 
+/** Is this the isolated faithk7 custom build? */
+declare const __CUSTOM_BUILD__: boolean
+
 /** The OAuth client id the app should use */
 declare const __OAUTH_CLIENT_ID__: string | undefined
 

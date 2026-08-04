@@ -27,6 +27,7 @@ export interface ILicense {
 import {
   getBundleID,
   getCompanyName,
+  getIsCustomBuild,
   getProductName,
 } from '../app/package-info'
 
@@ -219,13 +220,15 @@ function packageApp() {
     protocols: [
       {
         name: getBundleID(),
-        schemes: [
-          !isDevelopmentBuild
-            ? 'x-github-desktop-auth'
-            : 'x-github-desktop-dev-auth',
-          'x-github-client',
-          'github-mac',
-        ],
+        schemes: getIsCustomBuild()
+          ? ['x-github-desktop-dev-auth']
+          : [
+              !isDevelopmentBuild
+                ? 'x-github-desktop-auth'
+                : 'x-github-desktop-dev-auth',
+              'x-github-client',
+              'github-mac',
+            ],
       },
     ],
     extendInfo: extendInfoPath,

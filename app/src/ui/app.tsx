@@ -11,6 +11,7 @@ import {
   CommitOptions,
 } from '../lib/app-state'
 import { Dispatcher } from './dispatcher'
+import { getCommitHistoryOrder } from '../lib/commit-history-order'
 import { AppStore, GitHubUserStore, IssuesStore } from '../lib/stores'
 import { assertNever } from '../lib/fatal-error'
 import { shell } from '../lib/app-shell'
@@ -899,6 +900,7 @@ export class App extends React.Component<IAppProps, IAppState> {
 
     await this.props.dispatcher.initializeCompare(state.repository, {
       kind: HistoryTabMode.History,
+      order: getCommitHistoryOrder(),
     })
 
     await this.props.dispatcher.changeRepositorySection(
@@ -4099,6 +4101,7 @@ export class App extends React.Component<IAppProps, IAppState> {
     // us to do just that.
     this.props.dispatcher.executeCompare(repository, {
       kind: HistoryTabMode.History,
+      order: getCommitHistoryOrder(),
     })
   }
 

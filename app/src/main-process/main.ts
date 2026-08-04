@@ -102,17 +102,22 @@ function getExtraErrorContext(): Record<string, string> {
 /** Extra argument for the protocol launcher on Windows */
 const protocolLauncherArg = '--protocol-launcher'
 
-const possibleProtocols = new Set(['x-github-client'])
+const possibleProtocols = new Set<string>()
 if (__DEV_SECRETS__) {
   possibleProtocols.add('x-github-desktop-dev-auth')
 } else {
   possibleProtocols.add('x-github-desktop-auth')
 }
 // Also support Desktop Classic's protocols.
-if (__DARWIN__) {
-  possibleProtocols.add('github-mac')
-} else if (__WIN32__) {
-  possibleProtocols.add('github-windows')
+// The custom build deliberately avoids claiming protocols owned by the
+// official application so both apps can coexist safely.
+if (!__CUSTOM_BUILD__) {
+  possibleProtocols.add('x-github-client')
+  if (__DARWIN__) {
+    possibleProtocols.add('github-mac')
+  } else if (__WIN32__) {
+    possibleProtocols.add('github-windows')
+  }
 }
 
 // On Windows, in order to get notifications properly working for dev builds,

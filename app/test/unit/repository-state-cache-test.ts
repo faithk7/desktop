@@ -10,7 +10,11 @@ import {
   AppFileStatusKind,
 } from '../../src/models/status'
 import { DiffSelection, DiffSelectionType } from '../../src/models/diff'
-import { HistoryTabMode, IDisplayHistory } from '../../src/lib/app-state'
+import {
+  CommitHistoryOrder,
+  HistoryTabMode,
+  IDisplayHistory,
+} from '../../src/lib/app-state'
 import { gitHubRepoFixture } from '../helpers/github-repo-builder'
 import { TestStatsStore } from '../helpers/test-stats-store'
 
@@ -100,6 +104,7 @@ describe('RepositoryStateCache', () => {
     cache.updateCompareState(repository, () => {
       const newState: IDisplayHistory = {
         kind: HistoryTabMode.History,
+        order: CommitHistoryOrder.NewestFirst,
       }
 
       return {

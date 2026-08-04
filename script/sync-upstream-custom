@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -euo pipefail
+
+custom_branch='custom/commit-history-order'
+push_changes=false
+
+if [[ "${1:-}" == '--push' ]]; then
+  push_changes=true
+elif [[ $# -gt 0 ]]; then
+  echo 'Usage: script/sync-upstream-custom [--push]' >&2
+  exit 2
+fi
+
+repository_root="$(git rev-parse --show-toplevel)"
+cd "$repository_root"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo 'The worktree must be clean before syncing.' >&2
+  exit 1
+fi
+
+git fetch --prune origin
+git fetch --prune upstream
+
+git switch development
+git merge --ff-only upstream/development
+
+git switch "$custom_branch"
+git rebase development
+
+if $push_changes; then
+  yarn test:unit
+  yarn lint
+  yarn build:custom
+  git push origin development
+  git push --force-with-lease origin "$custom_branch"
+else
+  echo 'Sync complete. Run script/sync-upstream-custom --push after reviewing the rebased branch.'
+fi

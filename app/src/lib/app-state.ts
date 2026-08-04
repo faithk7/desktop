@@ -894,6 +894,12 @@ export enum HistoryTabMode {
   Compare = 'Compare',
 }
 
+/** The order in which commits are presented in the history list. */
+export enum CommitHistoryOrder {
+  NewestFirst = 'newest-first',
+  OldestFirst = 'oldest-first',
+}
+
 /**
  * This represents whether the compare tab is currently viewing the
  * commits ahead or behind when merging some other branch into your
@@ -910,6 +916,7 @@ export enum ComparisonMode {
  */
 export interface IDisplayHistory {
   readonly kind: HistoryTabMode.History
+  readonly order: CommitHistoryOrder
 }
 
 /**
@@ -988,6 +995,7 @@ export interface ICompareFormUpdate {
 
 export interface IViewHistory {
   readonly kind: HistoryTabMode.History
+  readonly order: CommitHistoryOrder
 }
 
 export interface ICompareToBranch {

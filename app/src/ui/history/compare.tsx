@@ -2,6 +2,7 @@ import * as React from 'react'
 
 import { Commit, CommitOneLine, ICommitContext } from '../../models/commit'
 import {
+  CommitHistoryOrder,
   HistoryTabMode,
   ICompareState,
   ICompareBranch,
@@ -34,6 +35,8 @@ import { KeyboardInsertionData } from '../lib/list'
 import { Account } from '../../models/account'
 import { Emoji } from '../../lib/emoji'
 import { formatNumber } from '../../lib/format-number'
+import { getCommitHistoryOrder } from '../../lib/commit-history-order'
+import { Select } from '../lib/select'
 
 interface ICompareSidebarProps {
   readonly repository: Repository
@@ -73,6 +76,9 @@ interface ICompareSidebarState {
 
   /** Data to be reordered via keyboard */
   readonly keyboardReorderData?: KeyboardInsertionData
+
+  /** Whether the commit history is being reloaded in a different order. */
+  readonly isChangingHistoryOrder: boolean
 }
 
 /** If we're within this many rows from the bottom, load the next history batch. */
@@ -92,7 +98,7 @@ export class CompareSidebar extends React.Component<
   public constructor(props: ICompareSidebarProps) {
     super(props)
 
-    this.state = { focusedBranch: null }
+    this.state = { focusedBranch: null, isChangingHistoryOrder: false }
   }
 
   public componentWillReceiveProps(nextProps: ICompareSidebarProps) {
@@ -194,11 +200,61 @@ export class CompareSidebar extends React.Component<
     const formState = this.props.compareState.formState
     return (
       <div className="compare-commit-list">
-        {formState.kind === HistoryTabMode.History
-          ? this.renderCommitList()
-          : this.renderTabBar(formState)}
+        {formState.kind === HistoryTabMode.History ? (
+          <>
+            {this.renderHistoryOrderSelector(formState)}
+            {this.renderCommitList()}
+          </>
+        ) : (
+          this.renderTabBar(formState)
+        )}
       </div>
     )
+  }
+
+  private renderHistoryOrderSelector(formState: IDisplayHistory) {
+    return (
+      <div className="commit-history-order-selector">
+        <Select
+          label="Commit history order"
+          value={formState.order}
+          disabled={this.state.isChangingHistoryOrder}
+          onChange={this.onHistoryOrderChanged}
+        >
+          <option value={CommitHistoryOrder.NewestFirst}>Newest First</option>
+          <option value={CommitHistoryOrder.OldestFirst}>Oldest First</option>
+        </Select>
+      </div>
+    )
+  }
+
+  private onHistoryOrderChanged = async (
+    event: React.FormEvent<HTMLSelectElement>
+  ) => {
+    const order = event.currentTarget.value as CommitHistoryOrder
+    const formState = this.props.compareState.formState
+
+    if (
+      formState.kind !== HistoryTabMode.History ||
+      formState.order === order ||
+      this.state.isChangingHistoryOrder
+    ) {
+      return
+    }
+
+    this.setState({ isChangingHistoryOrder: true })
+    try {
+      const didChange = await this.props.dispatcher.executeCompare(
+        this.props.repository,
+        { kind: HistoryTabMode.History, order }
+      )
+
+      if (didChange) {
+        this.props.onCompareListScrolled(0)
+      }
+    } finally {
+      this.setState({ isChangingHistoryOrder: false })
+    }
   }
 
   private filterListResultsChanged = (resultCount: number) => {
@@ -208,6 +264,7 @@ export class CompareSidebar extends React.Component<
   private viewHistoryForBranch = () => {
     this.props.dispatcher.executeCompare(this.props.repository, {
       kind: HistoryTabMode.History,
+      order: getCommitHistoryOrder(),
     })
 
     this.props.dispatcher.updateCompareForm(this.props.repository, {
@@ -217,6 +274,14 @@ export class CompareSidebar extends React.Component<
 
   private renderCommitList() {
     const { formState, commitSHAs } = this.props.compareState
+    const isOldestFirst =
+      formState.kind === HistoryTabMode.History &&
+      formState.order === CommitHistoryOrder.OldestFirst
+    const displayCommitSHAs = isOldestFirst
+      ? [...commitSHAs].reverse()
+      : commitSHAs
+    const canReorder =
+      formState.kind === HistoryTabMode.History && !isOldestFirst
 
     let emptyListMessage: string | JSX.Element
     if (formState.kind === HistoryTabMode.History) {
@@ -244,7 +309,7 @@ export class CompareSidebar extends React.Component<
         gitHubRepository={this.props.repository.gitHubRepository}
         isLocalRepository={this.props.isLocalRepository}
         commitLookup={this.props.commitLookup}
-        commitSHAs={commitSHAs}
+        commitSHAs={displayCommitSHAs}
         selectedSHAs={this.props.selectedCommitShas}
         shasToHighlight={this.props.shasToHighlight}
         localCommitSHAs={this.props.localCommitSHAs}
@@ -252,7 +317,7 @@ export class CompareSidebar extends React.Component<
         canUndoCommits={formState.kind === HistoryTabMode.History}
         canAmendCommits={formState.kind === HistoryTabMode.History}
         emoji={this.props.emoji}
-        reorderingEnabled={formState.kind === HistoryTabMode.History}
+        reorderingEnabled={canReorder}
         onViewCommitOnGitHub={this.props.onViewCommitOnGitHub}
         onUndoCommit={this.onUndoCommit}
         onResetToCommit={this.onResetToCommit}
@@ -279,8 +344,8 @@ export class CompareSidebar extends React.Component<
         tagsToPush={this.props.tagsToPush ?? []}
         onRenderCommitDragElement={this.onRenderCommitDragElement}
         onRemoveCommitDragElement={this.onRemoveCommitDragElement}
-        disableReordering={formState.kind === HistoryTabMode.Compare}
-        disableSquashing={formState.kind === HistoryTabMode.Compare}
+        disableReordering={!canReorder}
+        disableSquashing={!canReorder}
         isMultiCommitOperationInProgress={
           this.props.isMultiCommitOperationInProgress
         }

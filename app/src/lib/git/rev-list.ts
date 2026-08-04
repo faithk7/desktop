@@ -4,6 +4,31 @@ import { Repository } from '../../models/repository'
 import { Branch, BranchType, IAheadBehind } from '../../models/branch'
 import { CommitOneLine } from '../../models/commit'
 
+/** Get the number of commits reachable from the given revision. */
+export async function getCommitCount(
+  repository: Repository,
+  revision: string
+): Promise<number> {
+  const result = await git(
+    ['rev-list', '--count', revision, '--'],
+    repository.path,
+    'getCommitCount',
+    { successExitCodes: new Set([0, 128]) }
+  )
+
+  // An unborn branch has no HEAD and therefore no reachable commits.
+  if (result.exitCode === 128) {
+    return 0
+  }
+
+  const count = parseInt(result.stdout.trim(), 10)
+  if (isNaN(count)) {
+    throw new Error(`Unable to parse commit count: '${result.stdout.trim()}'`)
+  }
+
+  return count
+}
+
 /**
  * Convert two refs into the Git range syntax representing the set of commits
  * that are reachable from `to` but excluding those that are reachable from

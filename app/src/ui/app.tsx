@@ -11,7 +11,7 @@ import {
   CommitOptions,
 } from '../lib/app-state'
 import { Dispatcher } from './dispatcher'
-import { getCommitHistoryOrder } from '../lib/commit-history-order'
+import { getRepositoryHistoryOrder } from '../lib/repository-view-state'
 import { AppStore, GitHubUserStore, IssuesStore } from '../lib/stores'
 import { assertNever } from '../lib/fatal-error'
 import { shell } from '../lib/app-shell'
@@ -900,7 +900,7 @@ export class App extends React.Component<IAppProps, IAppState> {
 
     await this.props.dispatcher.initializeCompare(state.repository, {
       kind: HistoryTabMode.History,
-      order: getCommitHistoryOrder(),
+      order: getRepositoryHistoryOrder(state.repository),
     })
 
     await this.props.dispatcher.changeRepositorySection(
@@ -3559,6 +3559,14 @@ export class App extends React.Component<IAppProps, IAppState> {
 
     const items = generateRepositoryListContextMenu({
       onRemoveRepository: this.removeRepository,
+      onResetCurrentBranchView:
+        this.props.dispatcher.resetCurrentBranchViewState.bind(
+          this.props.dispatcher
+        ),
+      canResetCurrentBranchView:
+        this.props.dispatcher.hasCurrentBranchViewState.bind(
+          this.props.dispatcher
+        ),
       onShowRepository: this.showRepository,
       onOpenInShell: this.openInShell,
       onOpenInExternalEditor: this.openInExternalEditor,
@@ -4101,7 +4109,7 @@ export class App extends React.Component<IAppProps, IAppState> {
     // us to do just that.
     this.props.dispatcher.executeCompare(repository, {
       kind: HistoryTabMode.History,
-      order: getCommitHistoryOrder(),
+      order: getRepositoryHistoryOrder(repository),
     })
   }
 

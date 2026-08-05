@@ -8,13 +8,11 @@ import {
 } from '../../models/status'
 import { Tip, TipState } from '../../models/tip'
 import {
-  CommitHistoryOrder,
   HistoryTabMode,
   IBranchesState,
   IChangesState,
   ICompareState,
   IRepositoryState,
-  RepositorySectionTab,
   ICommitSelection,
   ChangesSelectionKind,
   IMultiCommitOperationUndoState,
@@ -27,6 +25,7 @@ import { sendNonFatalException } from '../helpers/non-fatal-exception'
 import { IStatsStore } from '../stats'
 import { RepoRulesInfo } from '../../models/repo-rules'
 import { WorktreeEntry } from '../../models/worktree'
+import { getRepositoryViewState } from '../repository-view-state'
 
 export class RepositoryStateCache {
   private readonly repositoryState = new Map<string, IRepositoryState>()
@@ -40,7 +39,7 @@ export class RepositoryStateCache {
       return existing
     }
 
-    const newItem = getInitialRepositoryState()
+    const newItem = getInitialRepositoryState(repository)
     this.repositoryState.set(repository.hash, newItem)
     return newItem
   }
@@ -359,7 +358,9 @@ export class RepositoryStateCache {
   }
 }
 
-function getInitialRepositoryState(): IRepositoryState {
+function getInitialRepositoryState(repository: Repository): IRepositoryState {
+  const repositoryViewState = getRepositoryViewState(repository)
+
   return {
     commitSelection: {
       shas: [],
@@ -394,7 +395,7 @@ function getInitialRepositoryState(): IRepositoryState {
         isExcludedFromCommit: false,
       },
     },
-    selectedSection: RepositorySectionTab.Changes,
+    selectedSection: repositoryViewState.selectedSection,
     branchesState: {
       tip: { kind: TipState.Unknown },
       defaultBranch: null,
@@ -410,7 +411,7 @@ function getInitialRepositoryState(): IRepositoryState {
     compareState: {
       formState: {
         kind: HistoryTabMode.History,
-        order: CommitHistoryOrder.NewestFirst,
+        order: repositoryViewState.order,
       },
       tip: null,
       mergeStatus: null,

@@ -18,6 +18,8 @@ interface IRepositoryListItemContextMenuConfig {
   onShowRepository: (repository: Repositoryish) => void
   onOpenInExternalEditor: (repository: Repositoryish) => void
   onRemoveRepository: (repository: Repositoryish) => void
+  onResetCurrentBranchView: (repository: Repository) => void
+  canResetCurrentBranchView: (repository: Repository) => boolean
   onChangeRepositoryAlias: (repository: Repository) => void
   onRemoveRepositoryAlias: (repository: Repository) => void
   onCreateWorktree?: (repository: Repository) => void
@@ -70,6 +72,7 @@ export const generateRepositoryListContextMenu = (
       action: () => config.onOpenInExternalEditor(repository),
       enabled: !missing,
     },
+    ...buildResetViewMenuItems(config),
     { type: 'separator' },
     {
       label: config.askForConfirmationOnRemoveRepository ? 'Remove…' : 'Remove',
@@ -78,6 +81,26 @@ export const generateRepositoryListContextMenu = (
   ]
 
   return items
+}
+
+const buildResetViewMenuItems = (
+  config: IRepositoryListItemContextMenuConfig
+): ReadonlyArray<IMenuItem> => {
+  const { repository } = config
+  if (!(repository instanceof Repository)) {
+    return []
+  }
+
+  return [
+    { type: 'separator' },
+    {
+      label: __DARWIN__
+        ? 'Reset Current Branch View'
+        : 'Reset current branch view',
+      action: () => config.onResetCurrentBranchView(repository),
+      enabled: config.canResetCurrentBranchView(repository),
+    },
+  ]
 }
 
 const buildAliasMenuItems = (

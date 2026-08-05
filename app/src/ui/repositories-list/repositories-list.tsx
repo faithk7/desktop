@@ -289,6 +289,14 @@ export class RepositoriesList extends React.Component<
 
     const items = generateRepositoryListContextMenu({
       onRemoveRepository: this.props.onRemoveRepository,
+      onResetCurrentBranchView:
+        this.props.dispatcher.resetCurrentBranchViewState.bind(
+          this.props.dispatcher
+        ),
+      canResetCurrentBranchView:
+        this.props.dispatcher.hasCurrentBranchViewState.bind(
+          this.props.dispatcher
+        ),
       onShowRepository: this.props.onShowRepository,
       onOpenInShell: this.props.onOpenInShell,
       onOpenInExternalEditor: this.props.onOpenInExternalEditor,

@@ -294,9 +294,15 @@ import {
   getFloatNumber,
 } from '../local-storage'
 import {
-  getCommitHistoryOrder,
-  setCommitHistoryOrder,
-} from '../commit-history-order'
+  clearCurrentBranchViewState,
+  deleteRepositoryViewState,
+  getBranchKey,
+  getBranchViewState,
+  getRepositoryViewState,
+  IRepositoryBranchViewState,
+  storeBranchViewState,
+  updateRepositoryViewState,
+} from '../repository-view-state'
 import { ExternalEditorError, suggestedExternalEditor } from '../editors/shared'
 import { ApiRepositoriesStore } from './api-repositories-store'
 import {
@@ -746,6 +752,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
   private alwaysUseCopilotForConflictResolution: boolean = false
 
   private showChangesFilter: boolean = false
+
+  /** Generations used to cancel stale asynchronous history restoration. */
+  private readonly historyRestoreGenerations = new Map<string, number>()
 
   private selectedCopilotModelsByAccount: CopilotModelSelectionsByAccount =
     new Map()
@@ -1590,12 +1599,55 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }))
   }
 
+  private nextHistoryRestoreGeneration(repository: Repository): number {
+    const generation =
+      (this.historyRestoreGenerations.get(repository.hash) ?? 0) + 1
+    this.historyRestoreGenerations.set(repository.hash, generation)
+    return generation
+  }
+
+  private isHistoryRestoreCurrent(
+    repository: Repository,
+    generation: number,
+    branchKey: string
+  ): boolean {
+    if (this.historyRestoreGenerations.get(repository.hash) !== generation) {
+      return false
+    }
+
+    const state = this.repositoryStateCache.get(repository)
+    return (
+      getBranchKey(state.branchesState.tip) === branchKey &&
+      state.compareState.formState.kind === HistoryTabMode.History
+    )
+  }
+
+  private storeCurrentBranchSelection(repository: Repository): void {
+    const state = this.repositoryStateCache.get(repository)
+    if (state.compareState.formState.kind !== HistoryTabMode.History) {
+      return
+    }
+
+    const { commitSelection } = state
+    storeBranchViewState(repository, state.branchesState.tip, {
+      selectedCommitSHAs: commitSelection.shas,
+      isContiguous: commitSelection.isContiguous,
+      selectedFileID: commitSelection.file?.id ?? null,
+    })
+  }
+
   /** This shouldn't be called directly. See `Dispatcher`. */
   public _changeCommitSelection(
     repository: Repository,
     shas: ReadonlyArray<string>,
-    isContiguous: boolean
+    isContiguous: boolean,
+    invalidateHistoryRestore: boolean = true,
+    persistViewState: boolean = true
   ): void {
+    if (invalidateHistoryRestore) {
+      this.nextHistoryRestoreGeneration(repository)
+    }
+
     const { commitSelection, commitLookup, compareState } =
       this.repositoryStateCache.get(repository)
 
@@ -1624,6 +1676,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
       changesetData: { files: [], linesAdded: 0, linesDeleted: 0 },
       diff: null,
     }))
+
+    if (persistViewState) {
+      this.storeCurrentBranchSelection(repository)
+    }
 
     this.emitUpdate()
   }
@@ -1707,7 +1763,8 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
   private updateOrSelectFirstCommit(
     repository: Repository,
-    commitSHAs: ReadonlyArray<string>
+    commitSHAs: ReadonlyArray<string>,
+    persistViewState: boolean = true
   ) {
     const state = this.repositoryStateCache.get(repository)
     let selectedSHA =
@@ -1726,9 +1783,84 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
 
     if (selectedSHA === null && commitSHAs.length > 0) {
-      this._changeCommitSelection(repository, [commitSHAs[0]], true)
-      this._loadChangedFilesForCurrentSelection(repository)
+      this._changeCommitSelection(
+        repository,
+        [commitSHAs[0]],
+        true,
+        true,
+        persistViewState
+      )
+      this._loadChangedFilesForCurrentSelection(
+        repository,
+        undefined,
+        true,
+        persistViewState
+      )
     }
+  }
+
+  private async restoreHistorySelection(
+    repository: Repository,
+    generation: number,
+    branchState: IRepositoryBranchViewState
+  ): Promise<void> {
+    const { branchKey, selectedCommitSHAs, isContiguous, selectedFileID } =
+      branchState
+
+    if (selectedCommitSHAs.length === 0) {
+      return
+    }
+
+    while (this.isHistoryRestoreCurrent(repository, generation, branchKey)) {
+      const state = this.repositoryStateCache.get(repository)
+      if (
+        selectedCommitSHAs.every(sha =>
+          state.compareState.commitSHAs.includes(sha)
+        )
+      ) {
+        break
+      }
+
+      const countBeforeLoad = state.compareState.commitSHAs.length
+      await this._loadNextCommitBatch(repository)
+      const countAfterLoad =
+        this.repositoryStateCache.get(repository).compareState.commitSHAs.length
+      if (countAfterLoad === countBeforeLoad) {
+        break
+      }
+    }
+
+    if (!this.isHistoryRestoreCurrent(repository, generation, branchKey)) {
+      return
+    }
+
+    const state = this.repositoryStateCache.get(repository)
+    const allSelectedCommitsExist = selectedCommitSHAs.every(sha =>
+      state.compareState.commitSHAs.includes(sha)
+    )
+
+    if (!allSelectedCommitsExist) {
+      clearCurrentBranchViewState(repository, state.branchesState.tip)
+      const displayCommitSHAs =
+        state.compareState.formState.kind === HistoryTabMode.History &&
+        state.compareState.formState.order === CommitHistoryOrder.OldestFirst
+          ? [...state.compareState.commitSHAs].reverse()
+          : state.compareState.commitSHAs
+      this.updateOrSelectFirstCommit(repository, displayCommitSHAs)
+      return
+    }
+
+    this._changeCommitSelection(
+      repository,
+      selectedCommitSHAs,
+      isContiguous,
+      false
+    )
+    await this._loadChangedFilesForCurrentSelection(
+      repository,
+      selectedFileID,
+      false
+    )
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */
@@ -1769,7 +1901,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
     const cachedState = compareState.formState
     const action =
       initialAction != null ? initialAction : getInitialAction(cachedState)
-    this._executeCompare(repository, action)
+    await this._executeCompare(repository, action)
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */
@@ -1781,6 +1913,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
     const kind = action.kind
 
     if (action.kind === HistoryTabMode.History) {
+      const restoreGeneration = this.nextHistoryRestoreGeneration(repository)
       const { tip } = gitStore
 
       let currentSha: string | null = null
@@ -1833,15 +1966,30 @@ export class AppStore extends TypedBaseStore<IAppState> {
         filterText: '',
         showBranchList: false,
       }))
-      setCommitHistoryOrder(action.order)
+      updateRepositoryViewState(repository, state => ({
+        ...state,
+        order: action.order,
+      }))
 
       const displayCommits =
         action.order === CommitHistoryOrder.OldestFirst
           ? [...commits].reverse()
           : commits
-      this.updateOrSelectFirstCommit(repository, displayCommits)
-
       this.emitUpdate()
+
+      const branchState = getBranchViewState(
+        repository,
+        this.repositoryStateCache.get(repository).branchesState.tip
+      )
+      if (branchState !== null && branchState.selectedCommitSHAs.length > 0) {
+        await this.restoreHistorySelection(
+          repository,
+          restoreGeneration,
+          branchState
+        )
+      } else {
+        this.updateOrSelectFirstCommit(repository, displayCommits)
+      }
       return true
     }
 
@@ -2032,7 +2180,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
   /** This shouldn't be called directly. See `Dispatcher`. */
   public async _loadChangedFilesForCurrentSelection(
-    repository: Repository
+    repository: Repository,
+    preferredFileID?: string | null,
+    invalidateHistoryRestore: boolean = true,
+    persistViewState: boolean = true
   ): Promise<void> {
     const state = this.repositoryStateCache.get(repository)
     const { commitSelection } = state
@@ -2067,12 +2218,17 @@ export class AppStore extends TypedBaseStore<IAppState> {
     // if we're selecting a commit for the first time, we should select the
     // first file in the commit and render the diff immediately
 
+    const preferredFile =
+      preferredFileID == null
+        ? null
+        : changesetData.files.find(file => file.id === preferredFileID) ?? null
     const noFileSelected = commitSelection.file === null
 
     const firstFileOrDefault =
-      noFileSelected && changesetData.files.length
+      preferredFile ??
+      (noFileSelected && changesetData.files.length
         ? changesetData.files[0]
-        : commitSelection.file
+        : commitSelection.file)
 
     this.repositoryStateCache.updateCommitSelection(repository, () => ({
       file: firstFileOrDefault,
@@ -2083,7 +2239,14 @@ export class AppStore extends TypedBaseStore<IAppState> {
     this.emitUpdate()
 
     if (firstFileOrDefault !== null) {
-      this._changeFileSelection(repository, firstFileOrDefault)
+      this._changeFileSelection(
+        repository,
+        firstFileOrDefault,
+        invalidateHistoryRestore,
+        persistViewState
+      )
+    } else if (persistViewState) {
+      this.storeCurrentBranchSelection(repository)
     }
   }
 
@@ -2096,12 +2259,21 @@ export class AppStore extends TypedBaseStore<IAppState> {
   /** This shouldn't be called directly. See `Dispatcher`. */
   public async _changeFileSelection(
     repository: Repository,
-    file: CommittedFileChange
+    file: CommittedFileChange,
+    invalidateHistoryRestore: boolean = true,
+    persistViewState: boolean = true
   ): Promise<void> {
+    if (invalidateHistoryRestore) {
+      this.nextHistoryRestoreGeneration(repository)
+    }
+
     this.repositoryStateCache.updateCommitSelection(repository, () => ({
       file,
       diff: null,
     }))
+    if (persistViewState) {
+      this.storeCurrentBranchSelection(repository)
+    }
     this.emitUpdate()
 
     const stateBeforeLoad = this.repositoryStateCache.get(repository)
@@ -2165,6 +2337,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
     repository: Repository | CloningRepository | null
   ): Promise<Repository | null> {
     const previouslySelectedRepository = this.selectedRepository
+
+    if (previouslySelectedRepository instanceof Repository) {
+      this.nextHistoryRestoreGeneration(previouslySelectedRepository)
+    }
 
     // do this quick check to see if we have a tutorial repository
     // cause if its not we can quickly hide the tutorial pane
@@ -3393,6 +3569,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
       }
       return { selectedSection }
     })
+    updateRepositoryViewState(repository, state => ({
+      ...state,
+      selectedSection,
+    }))
     this.emitUpdate()
 
     if (selectedSection === RepositorySectionTab.History) {
@@ -3411,6 +3591,38 @@ export class AppStore extends TypedBaseStore<IAppState> {
       ) as HTMLButtonElement
       button?.focus()
     }
+  }
+
+  /** Reset only the saved History position for the currently checked out branch. */
+  public _resetCurrentBranchViewState(repository: Repository): void {
+    const state = this.repositoryStateCache.get(repository)
+    if (!clearCurrentBranchViewState(repository, state.branchesState.tip)) {
+      return
+    }
+
+    this.nextHistoryRestoreGeneration(repository)
+
+    const isSelectedRepository =
+      this.selectedRepository instanceof Repository &&
+      this.selectedRepository.id === repository.id
+    if (isSelectedRepository) {
+      this.clearSelectedCommit(repository)
+      if (state.compareState.formState.kind === HistoryTabMode.History) {
+        const displayCommitSHAs =
+          state.compareState.formState.order === CommitHistoryOrder.OldestFirst
+            ? [...state.compareState.commitSHAs].reverse()
+            : state.compareState.commitSHAs
+        this.updateOrSelectFirstCommit(repository, displayCommitSHAs, false)
+      }
+    } else if (!isSelectedRepository) {
+      this.clearSelectedCommit(repository)
+      this.repositoryStateCache.updateCompareState(repository, () => ({
+        tip: null,
+        commitSHAs: [],
+      }))
+    }
+
+    this.emitUpdate()
   }
 
   /**
@@ -4785,7 +4997,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
     this._initializeCompare(repository, {
       kind: HistoryTabMode.History,
-      order: getCommitHistoryOrder(),
+      order: getRepositoryViewState(repository).order,
     })
 
     if (defaultBranch !== null && branch.name !== defaultBranch.name) {
@@ -8271,6 +8483,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
         this._removeCloningRepository(repository)
       } else {
         await this.repositoriesStore.removeRepository(repository)
+        deleteRepositoryViewState(repository)
       }
     } catch (err) {
       this.emitError(err)
@@ -10759,7 +10972,7 @@ function getInitialAction(
   if (cachedState.kind === HistoryTabMode.History) {
     return {
       kind: HistoryTabMode.History,
-      order: getCommitHistoryOrder(),
+      order: cachedState.order,
     }
   }
 

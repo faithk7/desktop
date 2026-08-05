@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { beforeEach, describe, it } from 'node:test'
 import assert from 'node:assert'
 import { RepositoryStateCache } from '../../src/lib/stores/repository-state-cache'
 import { Repository } from '../../src/models/repository'
@@ -14,9 +14,11 @@ import {
   CommitHistoryOrder,
   HistoryTabMode,
   IDisplayHistory,
+  RepositorySectionTab,
 } from '../../src/lib/app-state'
 import { gitHubRepoFixture } from '../helpers/github-repo-builder'
 import { TestStatsStore } from '../helpers/test-stats-store'
+import { updateRepositoryViewState } from '../../src/lib/repository-view-state'
 
 function createSamplePullRequest(gitHubRepository: GitHubRepository) {
   return new PullRequest(
@@ -40,6 +42,8 @@ function createSamplePullRequest(gitHubRepository: GitHubRepository) {
 }
 
 describe('RepositoryStateCache', () => {
+  beforeEach(() => localStorage.clear())
+
   it('can update branches state for a repository', () => {
     const repository = new Repository('/something/path', 1, null, false)
     const gitHubRepository = gitHubRepoFixture({
@@ -118,5 +122,23 @@ describe('RepositoryStateCache', () => {
     assert.equal(compareState.formState.kind, HistoryTabMode.History)
     assert.equal(compareState.filterText, filterText)
     assert.equal(compareState.commitSHAs.length, 1)
+  })
+
+  it('seeds persisted repository view preferences', () => {
+    const repository = new Repository('/something/path', 1, null, false)
+    updateRepositoryViewState(repository, state => ({
+      ...state,
+      selectedSection: RepositorySectionTab.History,
+      order: CommitHistoryOrder.OldestFirst,
+    }))
+
+    const state = new RepositoryStateCache(new TestStatsStore()).get(repository)
+    assert.equal(state.selectedSection, RepositorySectionTab.History)
+    assert.equal(
+      state.compareState.formState.kind === HistoryTabMode.History
+        ? state.compareState.formState.order
+        : null,
+      CommitHistoryOrder.OldestFirst
+    )
   })
 })

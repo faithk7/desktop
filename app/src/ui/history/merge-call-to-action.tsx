@@ -6,7 +6,7 @@ import { Branch } from '../../models/branch'
 import { Dispatcher } from '../dispatcher'
 import { Button } from '../lib/button'
 import { formatNumber } from '../../lib/format-number'
-import { getCommitHistoryOrder } from '../../lib/commit-history-order'
+import { getRepositoryHistoryOrder } from '../../lib/repository-view-state'
 
 interface IMergeCallToActionProps {
   readonly repository: Repository
@@ -83,7 +83,7 @@ export class MergeCallToAction extends React.Component<
 
     this.props.dispatcher.executeCompare(this.props.repository, {
       kind: HistoryTabMode.History,
-      order: getCommitHistoryOrder(),
+      order: getRepositoryHistoryOrder(this.props.repository),
     })
 
     this.props.dispatcher.updateCompareForm(this.props.repository, {

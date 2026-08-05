@@ -58,6 +58,7 @@ import type {
 import type { IBYOKProvider } from '../../lib/copilot/byok'
 import { RepositoryStateCache } from '../../lib/stores/repository-state-cache'
 import { getTipSha } from '../../lib/tip'
+import { getBranchViewState } from '../../lib/repository-view-state'
 
 import { Account } from '../../models/account'
 import { AppMenu, ExecutableMenuItem } from '../../models/app-menu'
@@ -310,6 +311,17 @@ export class Dispatcher {
     section: RepositorySectionTab
   ): Promise<void> {
     return this.appStore._changeRepositorySection(repository, section)
+  }
+
+  /** Whether the current branch has a saved History position. */
+  public hasCurrentBranchViewState(repository: Repository): boolean {
+    const tip = this.repositoryStateManager.get(repository).branchesState.tip
+    return getBranchViewState(repository, tip) !== null
+  }
+
+  /** Clear the saved History position for the currently checked out branch. */
+  public resetCurrentBranchViewState(repository: Repository): void {
+    this.appStore._resetCurrentBranchViewState(repository)
   }
 
   /**

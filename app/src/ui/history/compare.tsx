@@ -35,7 +35,7 @@ import { KeyboardInsertionData } from '../lib/list'
 import { Account } from '../../models/account'
 import { Emoji } from '../../lib/emoji'
 import { formatNumber } from '../../lib/format-number'
-import { getCommitHistoryOrder } from '../../lib/commit-history-order'
+import { getRepositoryHistoryOrder } from '../../lib/repository-view-state'
 import { Select } from '../lib/select'
 
 interface ICompareSidebarProps {
@@ -264,7 +264,7 @@ export class CompareSidebar extends React.Component<
   private viewHistoryForBranch = () => {
     this.props.dispatcher.executeCompare(this.props.repository, {
       kind: HistoryTabMode.History,
-      order: getCommitHistoryOrder(),
+      order: getRepositoryHistoryOrder(this.props.repository),
     })
 
     this.props.dispatcher.updateCompareForm(this.props.repository, {

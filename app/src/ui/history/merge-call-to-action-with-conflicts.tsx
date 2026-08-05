@@ -17,7 +17,7 @@ import {
   isIdMultiCommitOperation,
 } from '../../models/multi-commit-operation'
 import { RebasePreview } from '../../models/rebase'
-import { getCommitHistoryOrder } from '../../lib/commit-history-order'
+import { getRepositoryHistoryOrder } from '../../lib/repository-view-state'
 
 interface IMergeCallToActionWithConflictsProps {
   readonly repository: Repository
@@ -126,7 +126,7 @@ export class MergeCallToActionWithConflicts extends React.Component<
 
     dispatcher.executeCompare(repository, {
       kind: HistoryTabMode.History,
-      order: getCommitHistoryOrder(),
+      order: getRepositoryHistoryOrder(repository),
     })
 
     dispatcher.updateCompareForm(repository, {

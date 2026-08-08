@@ -31,6 +31,29 @@ and application-data directory are separate from the official GitHub Desktop.
 
 For development with hot reload, run `yarn start:custom` after the first build.
 
+## Quick reinstall
+
+After the initial dependency setup, rebuild, verify, reinstall, and relaunch the
+custom app with one command:
+
+```sh
+script/reinstall-custom
+```
+
+The helper reads the required versions from `.tool-versions`, derives all local
+paths from the checkout and `$HOME`, initializes missing dependencies and
+submodules, reuses the configured Git HTTP proxy for Electron downloads, and
+quits only `GitHub Desktop Custom` after a successful build. The official
+GitHub Desktop app and the custom app's separate user data are left untouched.
+
+To reinstall the existing build without rebuilding, or to leave the app closed
+after installation, use:
+
+```sh
+script/reinstall-custom --install-only
+script/reinstall-custom --no-launch
+```
+
 ## Sync from upstream
 
 Start with a clean worktree, then run:

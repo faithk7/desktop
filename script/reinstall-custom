@@ -1,0 +1,226 @@
+#!/bin/bash
+
+set -euo pipefail
+
+install_only=false
+launch_app=true
+
+usage() {
+  cat <<'EOF'
+Usage: script/reinstall-custom [--install-only] [--no-launch]
+
+Build and reinstall GitHub Desktop Custom on the current Mac.
+
+Options:
+  --install-only  Reinstall the existing build without rebuilding it.
+  --no-launch     Do not relaunch the app after installation.
+  -h, --help      Show this help message.
+EOF
+}
+
+fail() {
+  echo "reinstall-custom: $*" >&2
+  exit 1
+}
+
+tool_version() {
+  local tool="$1"
+  awk -v tool="$tool" '$1 == tool { print $2; exit }' .tool-versions
+}
+
+node_version() {
+  if command -v node >/dev/null 2>&1; then
+    node --version | sed 's/^v//'
+  fi
+}
+
+python_version() {
+  if command -v python >/dev/null 2>&1; then
+    python -c 'import platform; print(platform.python_version())'
+  fi
+}
+
+prepend_tool_bin() {
+  local executable="$1"
+  if [[ -x "$executable" ]]; then
+    PATH="$(dirname "$executable"):$PATH"
+    export PATH
+  fi
+}
+
+resolve_build_tools() {
+  local required_node
+  local required_python
+  local architecture
+  local candidate
+
+  required_node="$(tool_version nodejs)"
+  required_python="$(tool_version python)"
+  architecture="$(uname -m)"
+
+  if [[ "$(node_version)" != "$required_node" ]]; then
+    for candidate in \
+      "$HOME/Library/Caches/codex-build-tools/node-v${required_node}-darwin-${architecture}/bin/node" \
+      "$HOME/.asdf/installs/nodejs/$required_node/bin/node" \
+      "$HOME/.local/share/mise/installs/node/$required_node/bin/node"; do
+      prepend_tool_bin "$candidate"
+      if [[ "$(node_version)" == "$required_node" ]]; then
+        break
+      fi
+    done
+  fi
+
+  [[ "$(node_version)" == "$required_node" ]] ||
+    fail "Node $required_node is required; found $(node_version || echo none)."
+
+  if [[ "$(python_version)" != "$required_python" ]]; then
+    for candidate in \
+      "$HOME/.pyenv/versions/$required_python/bin/python" \
+      "$HOME/.asdf/installs/python/$required_python/bin/python" \
+      "$HOME/.local/share/mise/installs/python/$required_python/bin/python"; do
+      prepend_tool_bin "$candidate"
+      if [[ "$(python_version)" == "$required_python" ]]; then
+        break
+      fi
+    done
+  fi
+
+  [[ "$(python_version)" == "$required_python" ]] ||
+    fail "Python $required_python is required; found $(python_version || echo none)."
+
+  command -v yarn >/dev/null 2>&1 ||
+    fail 'Yarn is required. Install a Yarn launcher for the pinned Node runtime.'
+
+  export PYTHON="$(command -v python)"
+}
+
+configure_download_proxy() {
+  local configured_proxy
+
+  export ELECTRON_GET_USE_PROXY=1
+
+  if [[ -z "${HTTPS_PROXY:-}" && -z "${https_proxy:-}" ]]; then
+    configured_proxy="$(git config --get https.proxy || git config --get http.proxy || true)"
+    if [[ -n "$configured_proxy" ]]; then
+      export HTTPS_PROXY="$configured_proxy"
+      export https_proxy="$configured_proxy"
+    fi
+  fi
+
+  if [[ -z "${HTTP_PROXY:-}" && -z "${http_proxy:-}" ]]; then
+    configured_proxy="$(git config --get http.proxy || true)"
+    if [[ -n "$configured_proxy" ]]; then
+      export HTTP_PROXY="$configured_proxy"
+      export http_proxy="$configured_proxy"
+    fi
+  fi
+}
+
+prepare_checkout() {
+  if git submodule status --recursive | grep -q '^-'; then
+    echo 'Initializing Git submodules...'
+    git submodule update --init --recursive
+  fi
+
+  if [[ ! -x node_modules/.bin/ts-node || ! -d app/node_modules ]]; then
+    echo 'Installing dependencies...'
+    yarn install --frozen-lockfile
+  fi
+}
+
+custom_app_is_running() {
+  pgrep -f '^/Applications/GitHub Desktop Custom\.app/Contents/MacOS/GitHub Desktop Custom' \
+    >/dev/null 2>&1
+}
+
+stop_custom_app() {
+  local attempt
+
+  if ! custom_app_is_running; then
+    return
+  fi
+
+  echo 'Quitting GitHub Desktop Custom...'
+  osascript -e 'tell application id "com.faithk7.GitHubDesktopCustom" to quit' \
+    >/dev/null 2>&1 || true
+
+  for attempt in {1..50}; do
+    if ! custom_app_is_running; then
+      return
+    fi
+    sleep 0.1
+  done
+
+  fail 'GitHub Desktop Custom did not quit; installation was not changed.'
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-only)
+      install_only=true
+      ;;
+    --no-launch)
+      launch_app=false
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      fail "unknown option: $1"
+      ;;
+  esac
+  shift
+done
+
+[[ "$(uname -s)" == 'Darwin' ]] || fail 'macOS is required.'
+
+repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repository_root"
+
+case "$(uname -m)" in
+  arm64)
+    dist_architecture='arm64'
+    ;;
+  x86_64)
+    dist_architecture='x64'
+    ;;
+  *)
+    fail "unsupported architecture: $(uname -m)"
+    ;;
+esac
+
+built_app="$repository_root/dist/GitHub Desktop Custom-darwin-$dist_architecture/GitHub Desktop Custom.app"
+installed_app='/Applications/GitHub Desktop Custom.app'
+bundle_identifier='com.faithk7.GitHubDesktopCustom'
+
+if ! $install_only; then
+  resolve_build_tools
+  configure_download_proxy
+  prepare_checkout
+  echo 'Building GitHub Desktop Custom...'
+  yarn build:custom
+fi
+
+[[ -d "$built_app" ]] ||
+  fail "built app not found at $built_app; run without --install-only first."
+
+actual_identifier="$(plutil -extract CFBundleIdentifier raw "$built_app/Contents/Info.plist")"
+[[ "$actual_identifier" == "$bundle_identifier" ]] ||
+  fail "unexpected built bundle identifier: $actual_identifier"
+
+codesign --verify --deep --strict "$built_app"
+stop_custom_app
+
+echo "Installing $built_app to $installed_app..."
+ditto "$built_app" "$installed_app"
+codesign --verify --deep --strict "$installed_app"
+
+if $launch_app; then
+  echo 'Launching GitHub Desktop Custom...'
+  open "$installed_app"
+fi
+
+installed_version="$(plutil -extract CFBundleShortVersionString raw "$installed_app/Contents/Info.plist")"
+echo "GitHub Desktop Custom $installed_version reinstalled successfully."

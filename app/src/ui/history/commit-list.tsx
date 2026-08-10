@@ -31,7 +31,7 @@ import { Octicon } from '../octicons'
 import * as octicons from '../octicons/octicons.generated'
 import { HistoryNavigationButton } from './history-navigation-button'
 
-const RowHeight = 50
+const RowHeight = 70
 
 interface ICommitListProps {
   /** The GitHub repository associated with this commit (if found) */

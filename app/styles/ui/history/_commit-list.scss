@@ -162,7 +162,6 @@
       }
     }
 
-    .summary,
     .byline {
       @include ellipsis;
     }
@@ -235,6 +234,18 @@
   .tool-tip-contents {
     display: none;
   }
+}
+
+#commit-drag-element .commit .info .summary {
+  @include ellipsis;
+}
+
+#commit-list .commit .info .summary {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .commit-list-item-tooltip {

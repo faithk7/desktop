@@ -242,7 +242,7 @@ export class Dispatcher {
   }
 
   /** Load the next batch of history for the repository. */
-  public loadNextCommitBatch(repository: Repository): Promise<void> {
+  public loadNextCommitBatch(repository: Repository): Promise<boolean> {
     return this.appStore._loadNextCommitBatch(repository)
   }
 

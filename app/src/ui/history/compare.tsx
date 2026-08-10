@@ -79,6 +79,9 @@ interface ICompareSidebarState {
 
   /** Whether the commit history is being reloaded in a different order. */
   readonly isChangingHistoryOrder: boolean
+
+  /** Whether all remaining commits are being loaded and followed. */
+  readonly isLoadingAllCommits: boolean
 }
 
 /** If we're within this many rows from the bottom, load the next history batch. */
@@ -92,13 +95,25 @@ export class CompareSidebar extends React.Component<
   private readonly loadChangedFilesScheduler = new ThrottledScheduler(200)
   private branchList: BranchList | null = null
   private commitListRef = React.createRef<CommitList>()
-  private loadingMoreCommitsPromise: Promise<void> | null = null
+  private loadingMoreCommitsPromise: Promise<boolean> | null = null
+  private isLoadingAllCommits = false
+  private loadAllGeneration = 0
+  private isUnmounted = false
+  private commitCountWaiter: {
+    readonly previousCount: number
+    readonly generation: number
+    readonly resolve: () => void
+  } | null = null
   private resultCount = 0
 
   public constructor(props: ICompareSidebarProps) {
     super(props)
 
-    this.state = { focusedBranch: null, isChangingHistoryOrder: false }
+    this.state = {
+      focusedBranch: null,
+      isChangingHistoryOrder: false,
+      isLoadingAllCommits: false,
+    }
   }
 
   public componentWillReceiveProps(nextProps: ICompareSidebarProps) {
@@ -132,6 +147,39 @@ export class CompareSidebar extends React.Component<
   }
 
   public componentDidUpdate(prevProps: ICompareSidebarProps) {
+    const previousFormState = prevProps.compareState.formState
+    const formState = this.props.compareState.formState
+    const didHistoryOrderChange =
+      previousFormState.kind === HistoryTabMode.History &&
+      formState.kind === HistoryTabMode.History &&
+      previousFormState.order !== formState.order
+
+    if (
+      this.isLoadingAllCommits &&
+      (prevProps.repository !== this.props.repository ||
+        !this.isHistoryView() ||
+        didHistoryOrderChange)
+    ) {
+      this.cancelLoadAllCommits()
+    }
+
+    const previousCommitCount = prevProps.compareState.commitSHAs.length
+    const commitCount = this.props.compareState.commitSHAs.length
+
+    if (commitCount > previousCommitCount && this.isLoadingAllCommits) {
+      this.commitListRef.current?.scrollToBottom()
+    }
+
+    const waiter = this.commitCountWaiter
+    if (
+      waiter !== null &&
+      waiter.generation === this.loadAllGeneration &&
+      commitCount > waiter.previousCount
+    ) {
+      this.commitCountWaiter = null
+      waiter.resolve()
+    }
+
     const { showBranchList } = this.props.compareState
 
     if (showBranchList === prevProps.compareState.showBranchList) {
@@ -156,6 +204,8 @@ export class CompareSidebar extends React.Component<
   }
 
   public componentWillUnmount() {
+    this.isUnmounted = true
+    this.cancelLoadAllCommits(false)
     this.textbox = null
 
     // by hiding the branch list here when the component is torn down
@@ -352,8 +402,147 @@ export class CompareSidebar extends React.Component<
         keyboardReorderData={this.state.keyboardReorderData}
         accounts={this.props.accounts}
         preferAbsoluteDates={this.props.preferAbsoluteDates}
+        showHistoryNavigation={formState.kind === HistoryTabMode.History}
+        isLoadingAllCommits={this.state.isLoadingAllCommits}
+        onLoadAllAndGoToBottom={this.onLoadAllAndGoToBottom}
+        onGoToSelectedCommit={this.onGoToSelectedCommit}
       />
     )
+  }
+
+  private isHistoryView(props = this.props) {
+    return props.compareState.formState.kind === HistoryTabMode.History
+  }
+
+  private clearLoadingMoreCommitsPromise = (
+    promise: Promise<boolean>,
+    useCooldown: boolean
+  ) => {
+    const clear = () => {
+      if (this.loadingMoreCommitsPromise === promise) {
+        this.loadingMoreCommitsPromise = null
+      }
+    }
+
+    if (useCooldown) {
+      window.setTimeout(clear, 500)
+    } else {
+      clear()
+    }
+  }
+
+  private requestNextCommitBatch(useCooldown: boolean) {
+    if (this.loadingMoreCommitsPromise !== null) {
+      return this.loadingMoreCommitsPromise
+    }
+
+    const promise = this.props.dispatcher.loadNextCommitBatch(
+      this.props.repository
+    )
+    this.loadingMoreCommitsPromise = promise
+    promise.then(
+      () => this.clearLoadingMoreCommitsPromise(promise, useCooldown),
+      () => this.clearLoadingMoreCommitsPromise(promise, useCooldown)
+    )
+    return promise
+  }
+
+  private waitForCommitCountToIncrease(
+    previousCount: number,
+    generation: number
+  ) {
+    if (
+      this.props.compareState.commitSHAs.length > previousCount ||
+      generation !== this.loadAllGeneration
+    ) {
+      return Promise.resolve()
+    }
+
+    return new Promise<void>(resolve => {
+      this.commitCountWaiter?.resolve()
+      this.commitCountWaiter = { previousCount, generation, resolve }
+    })
+  }
+
+  private cancelLoadAllCommits(updateState = true) {
+    if (!this.isLoadingAllCommits) {
+      return
+    }
+
+    this.isLoadingAllCommits = false
+    this.loadAllGeneration++
+    this.commitCountWaiter?.resolve()
+    this.commitCountWaiter = null
+
+    if (updateState && !this.isUnmounted) {
+      this.setState({ isLoadingAllCommits: false })
+    }
+  }
+
+  private onLoadAllAndGoToBottom = async () => {
+    if (this.isLoadingAllCommits || !this.isHistoryView()) {
+      return
+    }
+
+    this.isLoadingAllCommits = true
+    const generation = ++this.loadAllGeneration
+    this.setState({ isLoadingAllCommits: true })
+    this.commitListRef.current?.scrollToBottom()
+
+    try {
+      while (generation === this.loadAllGeneration && this.isHistoryView()) {
+        const previousCount = this.props.compareState.commitSHAs.length
+        const promise = this.requestNextCommitBatch(false)
+        const didLoadCommits = await promise
+
+        // A pre-existing lazy-load request can still have a cooldown scheduled.
+        // Once load-all owns the sequence it should continue immediately.
+        this.clearLoadingMoreCommitsPromise(promise, false)
+
+        if (
+          !didLoadCommits ||
+          generation !== this.loadAllGeneration ||
+          !this.isHistoryView()
+        ) {
+          break
+        }
+
+        await this.waitForCommitCountToIncrease(previousCount, generation)
+
+        if (generation === this.loadAllGeneration) {
+          this.commitListRef.current?.scrollToBottom()
+        }
+      }
+    } finally {
+      if (generation === this.loadAllGeneration) {
+        this.isLoadingAllCommits = false
+        if (!this.isUnmounted) {
+          this.setState({ isLoadingAllCommits: false })
+        }
+      }
+    }
+  }
+
+  private onGoToSelectedCommit = async () => {
+    const selectedSHA = this.props.selectedCommitShas.at(0)
+    if (selectedSHA === undefined) {
+      return
+    }
+
+    const inFlightBatch = this.loadingMoreCommitsPromise
+    this.cancelLoadAllCommits()
+
+    if (inFlightBatch !== null) {
+      try {
+        await inFlightBatch
+      } catch {
+        // The selected commit is already loaded, so navigation can still work.
+      }
+    }
+
+    if (!this.isUnmounted && this.isHistoryView()) {
+      this.commitListRef.current?.scrollToSHA(selectedSHA)
+    }
   }
 
   private onCancelKeyboardReorder = () => {
@@ -590,24 +779,13 @@ export class CompareSidebar extends React.Component<
       return
     }
 
+    if (this.isLoadingAllCommits) {
+      return
+    }
+
     const commits = compareState.commitSHAs
     if (commits.length - end <= CloseToBottomThreshold) {
-      if (this.loadingMoreCommitsPromise != null) {
-        // as this callback fires for any scroll event we need to guard
-        // against re-entrant calls to loadCommitBatch
-        return
-      }
-
-      this.loadingMoreCommitsPromise = this.props.dispatcher
-        .loadNextCommitBatch(this.props.repository)
-        .then(() => {
-          // deferring unsetting this flag to some time _after_ the commits
-          // have been appended to prevent eagerly adding more commits due
-          // to scroll events (which fire indiscriminately)
-          window.setTimeout(() => {
-            this.loadingMoreCommitsPromise = null
-          }, 500)
-        })
+      this.requestNextCommitBatch(true)
     }
   }
 

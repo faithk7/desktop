@@ -993,6 +993,11 @@ export class List extends React.Component<IListProps, IListState> {
     }
   }
 
+  /** Scroll a row into view without changing list focus or selection. */
+  public scrollToRow(row: number) {
+    this.scrollRowToVisible(row, false)
+  }
+
   public componentDidMount() {
     const { props, grid } = this
     const { selectedRows, scrollToRow, setScrollTop } = props

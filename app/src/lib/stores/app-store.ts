@@ -2120,7 +2120,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */
-  public async _loadNextCommitBatch(repository: Repository): Promise<void> {
+  public async _loadNextCommitBatch(repository: Repository): Promise<boolean> {
     const gitStore = this.gitStoreCache.get(repository)
 
     const state = this.repositoryStateCache.get(repository)
@@ -2156,7 +2156,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       }
 
       if (!newCommits) {
-        return
+        return false
       }
 
       const existingCommits = new Set(commits)
@@ -2165,7 +2165,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       )
 
       if (uniqueNewCommits.length === 0) {
-        return
+        return false
       }
 
       this.repositoryStateCache.updateCompareState(repository, () => ({
@@ -2175,7 +2175,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
             : commits.concat(uniqueNewCommits),
       }))
       this.emitUpdate()
+      return true
     }
+
+    return false
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */

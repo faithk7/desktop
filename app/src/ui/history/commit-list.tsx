@@ -29,6 +29,7 @@ import { formatDate } from '../../lib/format-date'
 import { Avatar } from '../lib/avatar'
 import { Octicon } from '../octicons'
 import * as octicons from '../octicons/octicons.generated'
+import { HistoryNavigationButton } from './history-navigation-button'
 
 const RowHeight = 50
 
@@ -184,6 +185,18 @@ interface ICommitListProps {
 
   /** This will make the list semantics friendly to screen reader users in browse mode. */
   readonly isInformationalView?: boolean
+
+  /** Whether to show the history navigation control. */
+  readonly showHistoryNavigation?: boolean
+
+  /** Whether the navigation control is loading the remaining history. */
+  readonly isLoadingAllCommits?: boolean
+
+  /** Load all remaining commits and follow the bottom of the list. */
+  readonly onLoadAllAndGoToBottom?: () => void
+
+  /** Stop following the bottom and return to the selected commit. */
+  readonly onGoToSelectedCommit?: () => void
 }
 
 interface ICommitListState {
@@ -555,6 +568,20 @@ export class CommitList extends React.Component<
     this.listRef.current?.focus()
   }
 
+  public scrollToBottom() {
+    const lastRow = this.props.commitSHAs.length - 1
+    if (lastRow >= 0) {
+      this.listRef.current?.scrollToRow(lastRow)
+    }
+  }
+
+  public scrollToSHA(sha: string) {
+    const row = this.rowForSHA(sha)
+    if (row >= 0) {
+      this.listRef.current?.scrollToRow(row)
+    }
+  }
+
   public render() {
     const {
       commitSHAs,
@@ -624,6 +651,16 @@ export class CommitList extends React.Component<
           rowCustomClassNameMap={this.getRowCustomClassMap()}
           renderRowFocusTooltip={this.renderRowFocusTooltip}
         />
+        {this.props.showHistoryNavigation === true ? (
+          <HistoryNavigationButton
+            isLoading={this.props.isLoadingAllCommits === true}
+            canGoToSelectedCommit={selectedSHAs.length > 0}
+            onLoadAllAndGoToBottom={
+              this.props.onLoadAllAndGoToBottom ?? (() => {})
+            }
+            onGoToSelectedCommit={this.props.onGoToSelectedCommit ?? (() => {})}
+          />
+        ) : null}
         <AriaLiveContainer message={this.state.reorderingMessage} />
       </div>
     )

@@ -303,6 +303,11 @@ import {
   storeBranchViewState,
   updateRepositoryViewState,
 } from '../repository-view-state'
+import {
+  deleteRepositoryReadCommitSHAs,
+  storeRepositoryReadCommitSHAs,
+  toggleReadCommitSHAs,
+} from '../commit-read-status'
 import { ExternalEditorError, suggestedExternalEditor } from '../editors/shared'
 import { ApiRepositoriesStore } from './api-repositories-store'
 import {
@@ -2116,6 +2121,38 @@ export class AppStore extends TypedBaseStore<IAppState> {
       return merge(state, newState)
     })
 
+    this.emitUpdate()
+  }
+
+  /** This shouldn't be called directly. See `Dispatcher`. */
+  public _toggleCommitReadStatus(
+    repository: Repository,
+    commitSHAs: ReadonlyArray<string>
+  ): void {
+    if (commitSHAs.length === 0) {
+      return
+    }
+
+    const readCommitSHAs = toggleReadCommitSHAs(
+      this.repositoryStateCache.get(repository).readCommitSHAs,
+      commitSHAs
+    )
+
+    this.repositoryStateCache.update(repository, () => ({ readCommitSHAs }))
+    storeRepositoryReadCommitSHAs(repository, readCommitSHAs)
+    this.emitUpdate()
+  }
+
+  /** This shouldn't be called directly. See `Dispatcher`. */
+  public _clearCommitReadStatus(repository: Repository): void {
+    const state = this.repositoryStateCache.get(repository)
+    if (state.readCommitSHAs.size === 0) {
+      return
+    }
+
+    const readCommitSHAs = new Set<string>()
+    this.repositoryStateCache.update(repository, () => ({ readCommitSHAs }))
+    storeRepositoryReadCommitSHAs(repository, readCommitSHAs)
     this.emitUpdate()
   }
 
@@ -8487,6 +8524,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       } else {
         await this.repositoriesStore.removeRepository(repository)
         deleteRepositoryViewState(repository)
+        deleteRepositoryReadCommitSHAs(repository)
       }
     } catch (err) {
       this.emitError(err)

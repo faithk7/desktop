@@ -16,6 +16,7 @@ import {
   ChangesSelectionKind,
   IConstrainedValue,
   CommitOptions,
+  HistoryTabMode,
 } from '../lib/app-state'
 import { Dispatcher } from './dispatcher'
 import { IssuesStore, GitHubUserStore } from '../lib/stores'
@@ -36,6 +37,7 @@ import { PullRequestSuggestedNextAction } from '../models/pull-request'
 import { clamp } from '../lib/clamp'
 import { Emoji } from '../lib/emoji'
 import { PopupType } from '../models/popup'
+import { isToggleCommitReadShortcut } from './history/commit-read-shortcut'
 
 interface IRepositoryViewProps {
   readonly repository: Repository
@@ -380,6 +382,7 @@ export class RepositoryView extends React.Component<
         }
         accounts={this.props.accounts}
         preferAbsoluteDates={this.props.preferAbsoluteDates}
+        readCommitSHAs={state.readCommitSHAs}
       />
     )
   }
@@ -690,6 +693,19 @@ export class RepositoryView extends React.Component<
     }
 
     if (this.props.isShowingModal || this.props.isShowingFoldout) {
+      return
+    }
+
+    const { compareState, selectedSection } = this.props.state
+    if (
+      isToggleCommitReadShortcut(event) &&
+      selectedSection === RepositorySectionTab.History &&
+      compareState.formState.kind === HistoryTabMode.History &&
+      !compareState.showBranchList &&
+      this.props.state.commitSelection.shas.length > 0
+    ) {
+      this.compareSidebarRef.current?.toggleSelectedCommitReadStatus()
+      event.preventDefault()
       return
     }
 

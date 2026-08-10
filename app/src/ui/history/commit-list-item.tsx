@@ -27,6 +27,7 @@ import { Emoji } from '../../lib/emoji'
 import { enableAccessibleListToolTips } from '../../lib/feature-flag'
 import { TooltippedContent } from '../lib/tooltipped-content'
 import { formatDate } from '../../lib/format-date'
+import { Checkbox, CheckboxValue } from '../lib/checkbox'
 
 interface ICommitProps {
   readonly gitHubRepository: GitHubRepository | null
@@ -50,6 +51,8 @@ interface ICommitProps {
   readonly unpushedIndicatorTitle?: string
   readonly accounts: ReadonlyArray<Account>
   readonly preferAbsoluteDates: boolean
+  readonly isRead?: boolean
+  readonly onToggleReadStatus?: (commit: Commit) => void
 }
 
 interface ICommitListItemState {
@@ -172,6 +175,7 @@ export class CommitListItem extends React.PureComponent<
             </div>
           </div>
           {this.renderCommitIndicators()}
+          {this.renderReadStatus()}
         </div>
       </Draggable>
     )
@@ -206,6 +210,47 @@ export class CommitListItem extends React.PureComponent<
         disabled={enableAccessibleListToolTips()}
       >
         <Octicon symbol={octicons.arrowUp} />
+      </TooltippedContent>
+    )
+  }
+
+  private stopReadStatusPointerEvent = (
+    event: React.MouseEvent<HTMLInputElement>
+  ) => {
+    event.stopPropagation()
+  }
+
+  private onReadStatusChanged = () => {
+    this.props.onToggleReadStatus?.(this.props.commit)
+  }
+
+  private renderReadStatus() {
+    if (this.props.onToggleReadStatus === undefined) {
+      return null
+    }
+
+    const isRead = this.props.isRead === true
+    const tooltip = isRead ? 'Mark as unread (⌥C)' : 'Mark as read (⌥C)'
+    const summary =
+      this.props.commit.summary.length > 0
+        ? this.props.commit.summary
+        : 'Empty commit message'
+
+    return (
+      <TooltippedContent
+        tagName="div"
+        className="commit-read-status"
+        tooltip={tooltip}
+      >
+        <Checkbox
+          className="commit-read-status-control"
+          ariaLabel={`Read commit: ${summary}`}
+          tabIndex={-1}
+          value={isRead ? CheckboxValue.On : CheckboxValue.Off}
+          onChange={this.onReadStatusChanged}
+          onMouseDown={this.stopReadStatusPointerEvent}
+          onClick={this.stopReadStatusPointerEvent}
+        />
       </TooltippedContent>
     )
   }

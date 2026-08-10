@@ -197,6 +197,12 @@ interface ICommitListProps {
 
   /** Stop following the bottom and return to the selected commit. */
   readonly onGoToSelectedCommit?: () => void
+
+  /** Commit SHAs the user has marked as read. */
+  readonly readCommitSHAs?: ReadonlySet<string>
+
+  /** Toggle the read status of a commit. */
+  readonly onToggleCommitReadStatus?: (commit: Commit) => void
 }
 
 interface ICommitListState {
@@ -324,6 +330,8 @@ export class CommitList extends React.Component<
         disableSquashing={this.props.disableSquashing}
         accounts={this.props.accounts}
         preferAbsoluteDates={this.props.preferAbsoluteDates}
+        isRead={this.props.readCommitSHAs?.has(commit.sha) === true}
+        onToggleReadStatus={this.props.onToggleCommitReadStatus}
       />
     )
   }
@@ -602,6 +610,8 @@ export class CommitList extends React.Component<
     const classes = classNames({
       'has-highlighted-commits':
         shasToHighlight !== undefined && shasToHighlight.length > 0,
+      'has-read-status-controls':
+        this.props.onToggleCommitReadStatus !== undefined,
     })
 
     const selectedRows = selectedSHAs
@@ -646,6 +656,7 @@ export class CommitList extends React.Component<
             tagsToPush: this.props.tagsToPush,
             shasToHighlight: this.props.shasToHighlight,
             preferAbsoluteDates: this.props.preferAbsoluteDates,
+            readCommitSHAs: this.props.readCommitSHAs,
           }}
           setScrollTop={this.props.compareListScrollTop}
           rowCustomClassNameMap={this.getRowCustomClassMap()}

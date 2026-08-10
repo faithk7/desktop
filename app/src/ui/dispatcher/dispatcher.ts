@@ -246,6 +246,19 @@ export class Dispatcher {
     return this.appStore._loadNextCommitBatch(repository)
   }
 
+  /** Toggle the read status of one or more commits in this repository. */
+  public toggleCommitReadStatus(
+    repository: Repository,
+    commitSHAs: ReadonlyArray<string>
+  ): void {
+    this.appStore._toggleCommitReadStatus(repository, commitSHAs)
+  }
+
+  /** Clear all commit read statuses in this repository. */
+  public clearCommitReadStatus(repository: Repository): void {
+    this.appStore._clearCommitReadStatus(repository)
+  }
+
   /** Load the changed files for the current history selection. */
   public loadChangedFilesForCurrentSelection(
     repository: Repository

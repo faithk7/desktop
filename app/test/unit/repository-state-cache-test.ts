@@ -19,6 +19,7 @@ import {
 import { gitHubRepoFixture } from '../helpers/github-repo-builder'
 import { TestStatsStore } from '../helpers/test-stats-store'
 import { updateRepositoryViewState } from '../../src/lib/repository-view-state'
+import { storeRepositoryReadCommitSHAs } from '../../src/lib/commit-read-status'
 
 function createSamplePullRequest(gitHubRepository: GitHubRepository) {
   return new PullRequest(
@@ -140,5 +141,14 @@ describe('RepositoryStateCache', () => {
         : null,
       CommitHistoryOrder.OldestFirst
     )
+  })
+
+  it('seeds persisted repository commit read status', () => {
+    const repository = new Repository('/something/path', 1, null, false)
+    storeRepositoryReadCommitSHAs(repository, new Set(['one', 'two']))
+
+    const state = new RepositoryStateCache(new TestStatsStore()).get(repository)
+
+    assert.deepStrictEqual([...state.readCommitSHAs], ['one', 'two'])
   })
 })

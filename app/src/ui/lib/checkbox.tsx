@@ -19,6 +19,12 @@ interface ICheckboxProps {
   /** The function to call on value change. */
   readonly onChange?: (event: React.FormEvent<HTMLInputElement>) => void
 
+  /** Called when the checkbox is clicked. */
+  readonly onClick?: (event: React.MouseEvent<HTMLInputElement>) => void
+
+  /** Called when a pointer button is pressed on the checkbox. */
+  readonly onMouseDown?: (event: React.MouseEvent<HTMLInputElement>) => void
+
   /** The tab index of the input element. */
   readonly tabIndex?: number
 
@@ -31,6 +37,9 @@ interface ICheckboxProps {
   /** An aria description of a checkbox - intended to provide more verbose
    * information than a label that a the user might need */
   readonly ariaDescribedBy?: string
+
+  /** An accessible label for a checkbox without a visible label. */
+  readonly ariaLabel?: string
 
   readonly className?: string
 }
@@ -122,9 +131,12 @@ export class Checkbox extends React.Component<ICheckboxProps, ICheckboxState> {
           tabIndex={this.props.tabIndex}
           type="checkbox"
           onChange={this.onChange}
+          onClick={this.props.onClick}
+          onMouseDown={this.props.onMouseDown}
           onDoubleClick={this.onDoubleClick}
           ref={this.onInputRef}
           disabled={this.props.disabled}
+          aria-label={this.props.ariaLabel}
           aria-describedby={this.props.ariaDescribedBy}
           aria-labelledby={this.props.ariaLabelledBy}
         />

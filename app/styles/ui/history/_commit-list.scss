@@ -32,6 +32,11 @@
     }
   }
 
+  &.has-read-status-controls .history-navigation-button {
+    // Keep the floating navigation control clear of the right-edge checkbox.
+    right: calc(var(--spacing) + 24px);
+  }
+
   .draggable,
   .commit {
     width: 100%;
@@ -206,6 +211,24 @@
       padding: 0 var(--spacing-half);
       background: var(--list-item-badge-background-color);
       margin-left: var(--spacing-half);
+    }
+  }
+
+  .commit-read-status {
+    align-items: center;
+    display: flex;
+    flex: 0 0 20px;
+    justify-content: flex-end;
+    margin-left: var(--spacing-half);
+    pointer-events: auto !important;
+
+    .commit-read-status-control,
+    .checkbox-component {
+      pointer-events: auto !important;
+    }
+
+    input {
+      pointer-events: auto;
     }
   }
 

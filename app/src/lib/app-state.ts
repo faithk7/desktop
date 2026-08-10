@@ -546,6 +546,9 @@ export interface IRepositoryState {
   readonly compareState: ICompareState
   readonly selectedSection: RepositorySectionTab
 
+  /** The commits the user has marked as read in this repository. */
+  readonly readCommitSHAs: ReadonlySet<string>
+
   /**
    * The state of the current pull request view in the repository.
    *

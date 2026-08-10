@@ -36,7 +36,8 @@ import { Account } from '../../models/account'
 import { Emoji } from '../../lib/emoji'
 import { formatNumber } from '../../lib/format-number'
 import { getRepositoryHistoryOrder } from '../../lib/repository-view-state'
-import { Select } from '../lib/select'
+import { Button } from '../lib/button'
+import { AriaLiveContainer } from '../accessibility/aria-live-container'
 
 interface ICompareSidebarProps {
   readonly repository: Repository
@@ -65,6 +66,7 @@ interface ICompareSidebarProps {
   readonly shasToHighlight: ReadonlyArray<string>
   readonly accounts: ReadonlyArray<Account>
   readonly preferAbsoluteDates: boolean
+  readonly readCommitSHAs: ReadonlySet<string>
 }
 interface ICompareSidebarState {
   /**
@@ -82,6 +84,12 @@ interface ICompareSidebarState {
 
   /** Whether all remaining commits are being loaded and followed. */
   readonly isLoadingAllCommits: boolean
+
+  /** Read-status update announced to screen reader users. */
+  readonly readStatusMessage: string
+
+  /** Forces repeated read-status messages to be announced. */
+  readonly readStatusChangeSignal: boolean
 }
 
 /** If we're within this many rows from the bottom, load the next history batch. */
@@ -113,6 +121,8 @@ export class CompareSidebar extends React.Component<
       focusedBranch: null,
       isChangingHistoryOrder: false,
       isLoadingAllCommits: false,
+      readStatusMessage: '',
+      readStatusChangeSignal: false,
     }
   }
 
@@ -238,6 +248,10 @@ export class CompareSidebar extends React.Component<
         </div>
 
         {showBranchList ? this.renderFilterList() : this.renderCommits()}
+        <AriaLiveContainer
+          message={this.state.readStatusMessage}
+          trackedUserInput={this.state.readStatusChangeSignal}
+        />
       </div>
     )
   }
@@ -265,17 +279,39 @@ export class CompareSidebar extends React.Component<
   private renderHistoryOrderSelector(formState: IDisplayHistory) {
     return (
       <div className="commit-history-order-selector">
-        <Select
-          label="Order"
+        <label htmlFor="commit-history-order-select">Order</label>
+        <Button
+          className="clear-commit-read-status-button"
+          size="small"
+          disabled={this.props.readCommitSHAs.size === 0}
+          tooltip="Mark all commits as unread"
+          onClick={this.onClearCommitReadStatus}
+        >
+          Clear All
+        </Button>
+        <select
+          id="commit-history-order-select"
           value={formState.order}
           disabled={this.state.isChangingHistoryOrder}
           onChange={this.onHistoryOrderChanged}
         >
           <option value={CommitHistoryOrder.NewestFirst}>Newest First</option>
           <option value={CommitHistoryOrder.OldestFirst}>Oldest First</option>
-        </Select>
+        </select>
       </div>
     )
+  }
+
+  private onClearCommitReadStatus = () => {
+    if (this.props.readCommitSHAs.size === 0) {
+      return
+    }
+
+    this.setState(state => ({
+      readStatusMessage: 'Cleared all commit read statuses.',
+      readStatusChangeSignal: !state.readStatusChangeSignal,
+    }))
+    this.props.dispatcher.clearCommitReadStatus(this.props.repository)
   }
 
   private onHistoryOrderChanged = async (
@@ -406,7 +442,57 @@ export class CompareSidebar extends React.Component<
         isLoadingAllCommits={this.state.isLoadingAllCommits}
         onLoadAllAndGoToBottom={this.onLoadAllAndGoToBottom}
         onGoToSelectedCommit={this.onGoToSelectedCommit}
+        readCommitSHAs={
+          formState.kind === HistoryTabMode.History
+            ? this.props.readCommitSHAs
+            : undefined
+        }
+        onToggleCommitReadStatus={
+          formState.kind === HistoryTabMode.History
+            ? this.onToggleCommitReadStatus
+            : undefined
+        }
       />
+    )
+  }
+
+  private onToggleCommitReadStatus = (commit: Commit) => {
+    const action = this.props.readCommitSHAs.has(commit.sha) ? 'unread' : 'read'
+    this.setState(state => ({
+      readStatusMessage: `Marked ${
+        commit.summary || 'empty commit'
+      } as ${action}.`,
+      readStatusChangeSignal: !state.readStatusChangeSignal,
+    }))
+    this.props.dispatcher.toggleCommitReadStatus(this.props.repository, [
+      commit.sha,
+    ])
+  }
+
+  public toggleSelectedCommitReadStatus() {
+    if (
+      !this.isHistoryView() ||
+      this.props.compareState.showBranchList ||
+      this.props.selectedCommitShas.length === 0
+    ) {
+      return
+    }
+
+    const selectedCommitShas = this.props.selectedCommitShas
+    const readStatusMessage =
+      selectedCommitShas.length === 1
+        ? this.props.readCommitSHAs.has(selectedCommitShas[0])
+          ? 'Marked selected commit as unread.'
+          : 'Marked selected commit as read.'
+        : `Toggled read status for ${selectedCommitShas.length} commits.`
+
+    this.setState(state => ({
+      readStatusMessage,
+      readStatusChangeSignal: !state.readStatusChangeSignal,
+    }))
+    this.props.dispatcher.toggleCommitReadStatus(
+      this.props.repository,
+      selectedCommitShas
     )
   }
 

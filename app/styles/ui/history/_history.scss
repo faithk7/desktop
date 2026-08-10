@@ -46,31 +46,26 @@
     border-bottom: var(--base-border);
     display: flex;
     flex: none;
-    justify-content: flex-end;
+    gap: var(--spacing-half);
     padding: var(--spacing-half);
 
-    .select-component {
-      align-items: center;
-      display: flex;
-      flex-direction: row;
-      gap: var(--spacing-half);
+    label {
+      color: var(--text-secondary-color);
+      font-size: var(--font-size-sm);
+      margin-bottom: 0;
       min-width: 0;
-      width: 100%;
+      white-space: nowrap;
+    }
 
-      label {
-        color: var(--text-secondary-color);
-        font-size: var(--font-size-sm);
-        margin-bottom: 0;
-        min-width: 0;
-        white-space: nowrap;
-      }
+    .clear-commit-read-status-button {
+      flex: none;
+      margin-left: auto;
+    }
 
-      select {
-        flex: none;
-        margin-left: auto;
-        min-width: 110px;
-        width: auto;
-      }
+    select {
+      flex: none;
+      min-width: 110px;
+      width: auto;
     }
   }
 

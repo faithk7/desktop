@@ -124,7 +124,6 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
   private readonly cloneCancellationRequests = new Set<string>()
   private readonly cloneStartRequests = new Set<string>()
   private readonly cloneDestinationReservations = new Map<string, string>()
-  private readonly parallelCloneBatch = new Set<string>()
   private readonly repositoryPageCache = new Map<
     string,
     Promise<IAPISearchResponse<IAPIRepositorySearchItem>>
@@ -816,7 +815,7 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     }
   }
 
-  private cloneAndRead = async (
+  private cloneRepository = async (
     item: IAPIRepositorySearchItem,
     destination?: string
   ) => {
@@ -864,24 +863,6 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
       return
     }
 
-    const concurrentCloneUrls = new Set(
-      this.props.repositories
-        .filter(
-          (repository): repository is CloningRepository =>
-            repository instanceof CloningRepository
-        )
-        .map(repository => repository.url)
-    )
-    this.cloneDestinationReservations.forEach((_, url) =>
-      concurrentCloneUrls.add(url)
-    )
-    this.cloneStartRequests.forEach(url => concurrentCloneUrls.add(url))
-    concurrentCloneUrls.delete(cloneUrl)
-    if (concurrentCloneUrls.size > 0) {
-      concurrentCloneUrls.forEach(url => this.parallelCloneBatch.add(url))
-      this.parallelCloneBatch.add(cloneUrl)
-    }
-
     this.cloneDestinationReservations.set(cloneUrl, path)
     this.updateActiveClone(cloneUrl, { repository: item, path, error: null })
     this.setState({ error: null })
@@ -897,11 +878,9 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     }
     if (repository === null) {
       if (this.cloneCancellationRequests.delete(cloneUrl)) {
-        this.parallelCloneBatch.delete(cloneUrl)
         this.updateActiveClone(cloneUrl, null)
         return
       }
-      this.parallelCloneBatch.delete(cloneUrl)
       this.updateActiveClone(cloneUrl, {
         repository: item,
         path,
@@ -910,13 +889,7 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
       return
     }
 
-    const wasParallelClone =
-      this.parallelCloneBatch.delete(cloneUrl) ||
-      Array.from(this.cloneStartRequests).some(url => url !== cloneUrl)
     this.updateActiveClone(cloneUrl, null)
-    if (!wasParallelClone) {
-      await this.openFirstCommit(repository)
-    }
   }
 
   private getCloneDestinationError(
@@ -982,14 +955,14 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     const safeName = sanitizeCloneName(item.name)
     if (safeName !== null) {
       this.updateActiveClone(item.clone_url, null, () =>
-        this.cloneAndRead(item, Path.join(parent, safeName))
+        this.cloneRepository(item, Path.join(parent, safeName))
       )
     }
   }
 
   private retryClone = (item: IAPIRepositorySearchItem, path: string) => {
     this.updateActiveClone(item.clone_url, null, () =>
-      this.cloneAndRead(item, path)
+      this.cloneRepository(item, path)
     )
   }
 
@@ -1025,15 +998,13 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     }
   }
 
-  private onCloneAndReadClicked = (
-    event: React.MouseEvent<HTMLButtonElement>
-  ) => {
+  private onCloneClicked = (event: React.MouseEvent<HTMLButtonElement>) => {
     const cloneUrl = event.currentTarget.id
     const item = this.state.repositoryResults?.items.find(
       candidate => candidate.clone_url === cloneUrl
     )
     if (item !== undefined) {
-      this.cloneAndRead(item)
+      this.cloneRepository(item)
     }
   }
 
@@ -1178,9 +1149,9 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
             <Button
               className="button-component-primary"
               id={item.clone_url}
-              onClick={this.onCloneAndReadClicked}
+              onClick={this.onCloneClicked}
             >
-              {local === null ? 'Clone & Read' : 'Open First Commit'}
+              {local === null ? 'Clone' : 'Open First Commit'}
             </Button>
           )}
           <Button

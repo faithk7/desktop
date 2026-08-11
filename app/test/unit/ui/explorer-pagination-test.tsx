@@ -20,6 +20,7 @@ import {
 import { Account } from '../../../src/models/account'
 import { CloningRepository } from '../../../src/models/cloning-repository'
 import { ICloneProgress } from '../../../src/models/progress'
+import { Repository } from '../../../src/models/repository'
 import type { Dispatcher } from '../../../src/ui/dispatcher'
 import { Explorer } from '../../../src/ui/explorer'
 import {
@@ -477,13 +478,11 @@ describe('Explorer search and repository pagination', () => {
     assert.notEqual(alphaCard, null)
     assert.notEqual(betaCard, null)
 
-    fireEvent.click(
-      within(alphaCard!).getByRole('button', { name: 'Clone & Read' })
-    )
+    fireEvent.click(within(alphaCard!).getByRole('button', { name: 'Clone' }))
     await waitFor(() => assert.equal(cloneRequests.length, 1))
 
     const betaCloneButton = within(betaCard!).getByRole('button', {
-      name: 'Clone & Read',
+      name: 'Clone',
     })
     assert.equal(betaCloneButton.getAttribute('aria-disabled'), null)
     fireEvent.click(betaCloneButton)
@@ -497,6 +496,65 @@ describe('Explorer search and repository pagination', () => {
       cloneRequests.map(request => request.url),
       [alpha.clone_url, beta.clone_url]
     )
+  })
+
+  it('keeps Explorer open after a clone completes', async () => {
+    const item = repository(`no-auto-open-${process.pid}`)
+    const clonedRepository = new Repository(`/tmp/${item.name}`, 1, null, false)
+    let resolveClone: (repository: Repository) => void = () => {}
+    const clone = new Promise<Repository>(resolve => {
+      resolveClone = resolve
+    })
+    let selectionCount = 0
+    let closeCount = 0
+    const fakeDispatcher = {
+      clone: () => clone,
+      selectRepository: () => selectionCount++,
+      changeRepositorySection: () => {},
+      resetCurrentBranchViewState: () => {},
+      executeCompare: () => {},
+    }
+    localStorage.setItem(
+      'last-clone-location',
+      `/tmp/github-desktop-explorer-${process.pid}`
+    )
+
+    render(
+      <Explorer
+        accounts={[Account.anonymous()]}
+        repositories={[]}
+        cloningRepositoryStateLookup={new Map()}
+        selectedState={null}
+        dispatcher={fakeDispatcher as unknown as Dispatcher}
+        initialSessionState={{
+          page: ExplorerPage.Search,
+          repositoryQuery: item.name,
+          topicQuery: '',
+          repositorySort: ExplorerRepositorySort.BestMatch,
+          topicFilter: ExplorerTopicFilter.All,
+          repositoryPage: 1,
+          topicPage: 1,
+          repositoryResults: results(item, 1),
+          topicResults: null,
+          popularTopics: [],
+          selectedTopic: null,
+          popularTopicsScrollTop: 0,
+        }}
+        onSessionStateChanged={() => {}}
+        onClose={() => closeCount++}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Clone/ }))
+    await waitFor(() => assert.ok(screen.getByText('Starting clone…')))
+
+    resolveClone(clonedRepository)
+    await waitFor(() =>
+      assert.ok(screen.getByRole('button', { name: /Clone/ }))
+    )
+
+    assert.equal(selectionCount, 0)
+    assert.equal(closeCount, 0)
   })
 
   it('shows and cancels concurrent clone progress independently', () => {
@@ -622,13 +680,9 @@ describe('Explorer search and repository pagination', () => {
     const secondCard = screen.getByText('second/').closest('article')
     assert.notEqual(firstCard, null)
     assert.notEqual(secondCard, null)
-    fireEvent.click(
-      within(firstCard!).getByRole('button', { name: 'Clone & Read' })
-    )
+    fireEvent.click(within(firstCard!).getByRole('button', { name: 'Clone' }))
     await waitFor(() => assert.equal(cloneRequests.length, 1))
-    fireEvent.click(
-      within(secondCard!).getByRole('button', { name: 'Clone & Read' })
-    )
+    fireEvent.click(within(secondCard!).getByRole('button', { name: 'Clone' }))
 
     await waitFor(() =>
       assert.ok(

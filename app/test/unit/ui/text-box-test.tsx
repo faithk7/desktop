@@ -113,6 +113,32 @@ describe('TextBox', () => {
     assert.ok(view.container.textContent?.includes('Input cleared'))
   })
 
+  it('does not treat a submitted native search event as clearing the input', () => {
+    const enteredValues = new Array<string>()
+    let clearedCount = 0
+
+    render(
+      <TextBox
+        label="Search repositories"
+        type="search"
+        value="desktop"
+        onEnterPressed={value => enteredValues.push(value)}
+        onSearchCleared={() => clearedCount++}
+      />
+    )
+
+    const input = screen.getByRole('searchbox', {
+      name: 'Search repositories',
+    }) as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    input.dispatchEvent(new Event('search'))
+
+    assert.deepEqual(enteredValues, ['desktop'])
+    assert.equal(clearedCount, 0)
+    assert.equal(input.value, 'desktop')
+  })
+
   it('clears or blurs search inputs when escape is pressed', () => {
     const changedValues: Array<string> = []
     const blurValues: Array<string> = []

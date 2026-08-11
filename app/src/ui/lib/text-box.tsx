@@ -202,7 +202,11 @@ export class TextBox extends React.Component<ITextBoxProps, ITextBoxState> {
   }
 
   private onSearchTextCleared = () => {
-    this.setState({ valueCleared: true })
+    if (this.inputElement?.value !== '') {
+      return
+    }
+
+    this.setState({ value: '', valueCleared: true })
     this.props.onSearchCleared?.()
   }
 
@@ -263,11 +267,12 @@ export class TextBox extends React.Component<ITextBoxProps, ITextBoxState> {
       const value = ''
 
       event.preventDefault()
-      this.setState({ value })
+      this.setState({ value, valueCleared: true })
 
       if (this.props.onValueChanged) {
         this.props.onValueChanged(value)
       }
+      this.props.onSearchCleared?.()
     } else if (
       this.props.type === 'search' &&
       event.key === 'Escape' &&

@@ -115,7 +115,150 @@ function results(
   }
 }
 
-describe('Explorer repository pagination', () => {
+describe('Explorer search and repository pagination', () => {
+  it('keeps results while editing and searches only when Enter is pressed', async () => {
+    const queries = new Array<string>()
+    API.fromAccount = () =>
+      ({
+        searchRepositories: (query: string) => {
+          queries.push(query)
+          return Promise.resolve(results(repository(query), 1))
+        },
+      } as unknown as API)
+
+    render(
+      <Explorer
+        accounts={[Account.anonymous()]}
+        repositories={[]}
+        cloningRepositoryStateLookup={new Map()}
+        selectedState={null}
+        dispatcher={{} as Dispatcher}
+        initialSessionState={{
+          page: ExplorerPage.Search,
+          repositoryQuery: '',
+          topicQuery: '',
+          repositorySort: ExplorerRepositorySort.BestMatch,
+          topicFilter: ExplorerTopicFilter.All,
+          repositoryPage: 1,
+          topicPage: 1,
+          repositoryResults: null,
+          topicResults: null,
+          popularTopics: [],
+          selectedTopic: null,
+          popularTopicsScrollTop: 0,
+        }}
+        onSessionStateChanged={() => {}}
+        onClose={() => {}}
+      />
+    )
+
+    const input = screen.getByRole('searchbox', {
+      name: 'Search GitHub repositories',
+    }) as HTMLInputElement
+
+    fireEvent.change(input, { target: { value: 'desktop' } })
+    await new Promise(resolve => window.setTimeout(resolve, 350))
+    assert.deepEqual(queries, [])
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    input.dispatchEvent(new Event('search'))
+    await waitFor(() => assert.ok(screen.getByText('desktop')))
+    assert.deepEqual(queries, ['desktop'])
+    assert.equal(input.value, 'desktop')
+
+    fireEvent.change(input, { target: { value: 'electron' } })
+    await new Promise(resolve => window.setTimeout(resolve, 350))
+    assert.deepEqual(queries, ['desktop'])
+    assert.ok(screen.getByText('desktop'))
+
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: ExplorerRepositorySort.Stars },
+    })
+    await waitFor(() => assert.deepEqual(queries, ['desktop', 'desktop']))
+    assert.equal(input.value, 'electron')
+    assert.ok(screen.getByText('desktop'))
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    input.dispatchEvent(new Event('search'))
+    await waitFor(() => assert.ok(screen.getByText('electron')))
+    assert.deepEqual(queries, ['desktop', 'desktop', 'electron'])
+    assert.equal(input.value, 'electron')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await waitFor(() =>
+      assert.ok(screen.getByText('Find a repository to read'))
+    )
+    assert.deepEqual(queries, ['desktop', 'desktop', 'electron'])
+    assert.equal(input.value, '')
+  })
+
+  it('searches topics only when Enter is pressed', async () => {
+    const queries = new Array<string>()
+    const account = Account.anonymous()
+    setCachedExplorerTopics(
+      account.endpoint,
+      { kind: 'popular' },
+      topicResults(topic('initial'))
+    )
+    API.fromAccount = () =>
+      ({
+        searchTopics: (query: string) => {
+          queries.push(query)
+          return Promise.resolve(topicResults(topic(query)))
+        },
+        fetchTopicStargazerCounts: (names: ReadonlyArray<string>) =>
+          Promise.resolve(new Map(names.map(name => [name, 10]))),
+      } as unknown as API)
+
+    render(
+      <Explorer
+        accounts={[account]}
+        repositories={[]}
+        cloningRepositoryStateLookup={new Map()}
+        selectedState={null}
+        dispatcher={{} as Dispatcher}
+        initialSessionState={{
+          page: ExplorerPage.Tags,
+          repositoryQuery: '',
+          topicQuery: '',
+          repositorySort: ExplorerRepositorySort.BestMatch,
+          topicFilter: ExplorerTopicFilter.All,
+          repositoryPage: 1,
+          topicPage: 1,
+          repositoryResults: null,
+          topicResults: topicResults(topic('initial')),
+          popularTopics: [],
+          selectedTopic: null,
+          popularTopicsScrollTop: 0,
+        }}
+        onSessionStateChanged={() => {}}
+        onClose={() => {}}
+      />
+    )
+
+    const input = screen.getByRole('searchbox', {
+      name: 'Search GitHub topics',
+    }) as HTMLInputElement
+
+    fireEvent.change(input, { target: { value: 'mcp' } })
+    await new Promise(resolve => window.setTimeout(resolve, 350))
+    assert.deepEqual(queries, [])
+    assert.ok(screen.getByRole('button', { name: 'initial' }))
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    input.dispatchEvent(new Event('search'))
+    await waitFor(() => assert.ok(screen.getByRole('button', { name: 'mcp' })))
+    assert.deepEqual(queries, ['mcp'])
+    assert.equal(input.value, 'mcp')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await waitFor(() =>
+      assert.ok(screen.getByRole('button', { name: 'initial' }))
+    )
+    assert.deepEqual(queries, ['mcp'])
+    assert.equal(input.value, '')
+  })
+
   it('shares an in-flight prefetched page with a pagination click', async () => {
     const requestedPages = new Array<number>()
     let resolveSecondPage: (

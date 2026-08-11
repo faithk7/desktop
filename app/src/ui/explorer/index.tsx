@@ -79,6 +79,10 @@ export interface IExplorerSessionState {
 }
 
 interface IExplorerState extends IExplorerSessionState {
+  /** Repository text being edited but not yet submitted. */
+  readonly repositoryDraft: string
+  /** Topic text being edited but not yet submitted. */
+  readonly topicDraft: string
   readonly loadingRepositories: boolean
   readonly loadingTopics: boolean
   readonly loadingPopularTopics: boolean
@@ -132,11 +136,6 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
   private readonly searchResultsRef = React.createRef<HTMLElement>()
   private readonly popularTopicsScrollRef = React.createRef<HTMLDivElement>()
 
-  private searchRepositoriesDebounced = debounce(
-    () => this.searchRepositories(1),
-    300
-  )
-  private searchTopicsDebounced = debounce(() => this.searchTopics(1), 300)
   private savePopularTopicsScrollDebounced = debounce(
     (popularTopicsScrollTop: number) => {
       if (popularTopicsScrollTop !== this.state.popularTopicsScrollTop) {
@@ -149,6 +148,7 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
 
   public constructor(props: IExplorerProps) {
     super(props)
+    const initialSessionState = props.initialSessionState
     this.state = {
       page: ExplorerPage.Search,
       repositoryQuery: '',
@@ -162,7 +162,9 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
       popularTopics: null,
       selectedTopic: null,
       popularTopicsScrollTop: 0,
-      ...props.initialSessionState,
+      ...initialSessionState,
+      repositoryDraft: initialSessionState?.repositoryQuery ?? '',
+      topicDraft: initialSessionState?.topicQuery ?? '',
       loadingRepositories: false,
       loadingTopics: false,
       loadingPopularTopics: false,
@@ -261,8 +263,6 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
   }
 
   public componentWillUnmount() {
-    this.searchRepositoriesDebounced.cancel()
-    this.searchTopicsDebounced.cancel()
     this.savePopularTopicsScrollDebounced.cancel()
     this.repositoryRequest++
     this.topicRequest++
@@ -395,22 +395,38 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
   private showSearchPage = () => this.onPageChanged(ExplorerPage.Search)
   private showTagsPage = () => this.onPageChanged(ExplorerPage.Tags)
 
-  private searchRepositoriesFirstPage = () => this.searchRepositories(1)
-  private searchTopicsFirstPage = () => this.searchTopics(1)
-
-  private clearRepositorySearch = () => this.onRepositoryQueryChanged('')
-  private clearTopicSearch = () => this.onTopicQueryChanged('')
-
-  private onRepositoryQueryChanged = (repositoryQuery: string) => {
-    this.setState({ repositoryQuery, error: null }, () => {
-      this.searchRepositoriesDebounced()
-    })
+  private searchRepositoriesFirstPage = (repositoryQuery: string) => {
+    this.setState(
+      { repositoryDraft: repositoryQuery, repositoryQuery, error: null },
+      () => this.searchRepositories(1)
+    )
   }
 
-  private onTopicQueryChanged = (topicQuery: string) => {
-    this.setState({ topicQuery, error: null }, () => {
-      this.searchTopicsDebounced()
-    })
+  private searchTopicsFirstPage = (topicQuery: string) => {
+    this.setState({ topicDraft: topicQuery, topicQuery, error: null }, () =>
+      this.searchTopics(1)
+    )
+  }
+
+  private clearRepositorySearch = () => {
+    this.setState(
+      { repositoryDraft: '', repositoryQuery: '', error: null },
+      () => this.searchRepositories(1)
+    )
+  }
+
+  private clearTopicSearch = () => {
+    this.setState({ topicDraft: '', topicQuery: '', error: null }, () =>
+      this.searchTopics(1)
+    )
+  }
+
+  private onRepositoryQueryChanged = (repositoryDraft: string) => {
+    this.setState({ repositoryDraft, error: null })
+  }
+
+  private onTopicQueryChanged = (topicDraft: string) => {
+    this.setState({ topicDraft, error: null })
   }
 
   private onRepositorySortChanged = (
@@ -746,6 +762,7 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
       {
         page: ExplorerPage.Search,
         selectedTopic: topic,
+        repositoryDraft: '',
         repositoryQuery: '',
         repositoryResults: null,
       },
@@ -1301,7 +1318,7 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
               className="explorer-search-box"
               type="search"
               autoFocus={true}
-              value={this.state.repositoryQuery}
+              value={this.state.repositoryDraft}
               placeholder="Search GitHub repositories…"
               prefixedIcon={octicons.search}
               displayClearButton={true}
@@ -1415,7 +1432,7 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
           <h3>Tag search</h3>
           <TextBox
             type="search"
-            value={this.state.topicQuery}
+            value={this.state.topicDraft}
             placeholder="Search all topics"
             prefixedIcon={octicons.search}
             displayClearButton={true}

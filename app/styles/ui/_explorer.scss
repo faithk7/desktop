@@ -200,6 +200,17 @@
   }
 }
 
+.explorer-search-header {
+  position: sticky;
+  z-index: var(--list-sticky-header-top-level-z-index);
+  top: calc(-1 * var(--spacing-double));
+  display: flow-root;
+  margin: calc(-1 * var(--spacing-double))
+    calc(-1 * var(--spacing-double)) 0;
+  padding: var(--spacing-double) var(--spacing-double) 0;
+  background: var(--background-color);
+}
+
 .explorer-search-controls {
   display: flex;
   align-items: flex-end;

@@ -1313,41 +1313,43 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
       <div className="explorer-search-layout">
         {this.renderPopularTopics()}
         <section className="explorer-search-page" ref={this.searchResultsRef}>
-          <div className="explorer-search-controls">
-            <TextBox
-              className="explorer-search-box"
-              type="search"
-              autoFocus={true}
-              value={this.state.repositoryDraft}
-              placeholder="Search GitHub repositories…"
-              prefixedIcon={octicons.search}
-              displayClearButton={true}
-              ariaLabel="Search GitHub repositories"
-              onValueChanged={this.onRepositoryQueryChanged}
-              onEnterPressed={this.searchRepositoriesFirstPage}
-              onSearchCleared={this.clearRepositorySearch}
-            />
-            <Select
-              value={this.state.repositorySort}
-              onChange={this.onRepositorySortChanged}
-            >
-              <option value={ExplorerRepositorySort.BestMatch}>
-                Best match
-              </option>
-              <option value={ExplorerRepositorySort.Stars}>Most stars</option>
-              <option value={ExplorerRepositorySort.Updated}>
-                Recently updated
-              </option>
-            </Select>
-          </div>
-          {this.state.selectedTopic !== null && (
-            <div className="explorer-active-topic">
-              Topic: <strong>{this.state.selectedTopic}</strong>
-              <Button size="small" onClick={this.clearTopic}>
-                Clear
-              </Button>
+          <div className="explorer-search-header">
+            <div className="explorer-search-controls">
+              <TextBox
+                className="explorer-search-box"
+                type="search"
+                autoFocus={true}
+                value={this.state.repositoryDraft}
+                placeholder="Search GitHub repositories…"
+                prefixedIcon={octicons.search}
+                displayClearButton={true}
+                ariaLabel="Search GitHub repositories"
+                onValueChanged={this.onRepositoryQueryChanged}
+                onEnterPressed={this.searchRepositoriesFirstPage}
+                onSearchCleared={this.clearRepositorySearch}
+              />
+              <Select
+                value={this.state.repositorySort}
+                onChange={this.onRepositorySortChanged}
+              >
+                <option value={ExplorerRepositorySort.BestMatch}>
+                  Best match
+                </option>
+                <option value={ExplorerRepositorySort.Stars}>Most stars</option>
+                <option value={ExplorerRepositorySort.Updated}>
+                  Recently updated
+                </option>
+              </Select>
             </div>
-          )}
+            {this.state.selectedTopic !== null && (
+              <div className="explorer-active-topic">
+                Topic: <strong>{this.state.selectedTopic}</strong>
+                <Button size="small" onClick={this.clearTopic}>
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
           {this.state.error !== null &&
             this.renderError(this.retryRepositorySearch)}
           {this.state.loadingRepositories && results === null ? (

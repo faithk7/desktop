@@ -77,11 +77,22 @@ type RepoGroupItem = { group: RepositoryListGroup; repos: Repositoryish[] }
 export function groupRepositories(
   repositories: ReadonlyArray<Repositoryish>,
   localRepositoryStateLookup: ReadonlyMap<number, ILocalRepositoryState>,
-  recentRepositories: ReadonlyArray<number>
+  recentRepositories: ReadonlyArray<number>,
+  selectedRepositoryId: number | null
 ): ReadonlyArray<IFilterListGroup<IRepositoryListItem, RepositoryListGroup>> {
   const includeRecentGroup = repositories.length > recentRepositoriesThreshold
   const recentSet = includeRecentGroup ? new Set(recentRepositories) : undefined
+  const repositoryRanks = new Map<number, number>()
   const groups = new Map<string, RepoGroupItem>()
+
+  for (const repositoryId of [
+    ...(selectedRepositoryId === null ? [] : [selectedRepositoryId]),
+    ...recentRepositories,
+  ]) {
+    if (!repositoryRanks.has(repositoryId)) {
+      repositoryRanks.set(repositoryId, repositoryRanks.size)
+    }
+  }
 
   const addToGroup = (group: RepositoryListGroup, repo: Repositoryish) => {
     const key = getGroupKey(group)
@@ -110,7 +121,8 @@ export function groupRepositories(
         group,
         repos,
         localRepositoryStateLookup,
-        groups
+        groups,
+        repositoryRanks
       ),
     }))
 }
@@ -124,7 +136,8 @@ const toSortedListItems = (
   group: RepositoryListGroup,
   repositories: ReadonlyArray<Repositoryish>,
   localRepositoryStateLookup: ReadonlyMap<number, ILocalRepositoryState>,
-  groups: Map<string, RepoGroupItem>
+  groups: Map<string, RepoGroupItem>,
+  repositoryRanks: ReadonlyMap<number, number>
 ): IRepositoryListItem[] => {
   const groupNames = new Map<string, number>()
   const allNames = new Map<string, number>()
@@ -166,7 +179,22 @@ const toSortedListItems = (
         changedFilesCount: repoState?.changedFilesCount ?? 0,
       }
     })
-    .sort(({ repository: x }, { repository: y }) =>
-      caseInsensitiveCompare(getDisplayTitle(x), getDisplayTitle(y))
-    )
+    .sort(({ repository: x }, { repository: y }) => {
+      const xRank = repositoryRanks.get(x.id)
+      const yRank = repositoryRanks.get(y.id)
+
+      if (xRank !== undefined && yRank !== undefined) {
+        return xRank - yRank
+      }
+
+      if (xRank !== undefined) {
+        return -1
+      }
+
+      if (yRank !== undefined) {
+        return 1
+      }
+
+      return caseInsensitiveCompare(getDisplayTitle(x), getDisplayTitle(y))
+    })
 }

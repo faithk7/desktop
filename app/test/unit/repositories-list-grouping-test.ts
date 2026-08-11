@@ -28,8 +28,12 @@ describe('repository list grouping', () => {
 
   const cache = new Map<number, ILocalRepositoryState>()
 
+  const paths = (
+    items: ReturnType<typeof groupRepositories>[number]['items']
+  ) => items.map(item => item.repository.path)
+
   it('groups repositories by owners/Enterprise/Other', () => {
-    const grouped = groupRepositories(repositories, cache, [])
+    const grouped = groupRepositories(repositories, cache, [], null)
     assert.equal(grouped.length, 3)
 
     assert.equal(grouped[0].identifier.kind, 'dotcom')
@@ -72,7 +76,8 @@ describe('repository list grouping', () => {
     const grouped = groupRepositories(
       [repoC, repoB, repoZ, repoD, repoA],
       cache,
-      []
+      [],
+      null
     )
     assert.equal(grouped.length, 2)
 
@@ -127,7 +132,12 @@ describe('repository list grouping', () => {
       false
     )
 
-    const grouped = groupRepositories([repoA, repoB, repoC, repoD], cache, [])
+    const grouped = groupRepositories(
+      [repoA, repoB, repoC, repoD],
+      cache,
+      [],
+      null
+    )
     assert.equal(grouped.length, 3)
 
     assert.equal(grouped[0].identifier.kind, 'dotcom')
@@ -152,5 +162,85 @@ describe('repository list grouping', () => {
 
     assert.equal(grouped[2].items[1].text[0], 'enterprise-repo')
     assert(grouped[2].items[1].needsDisambiguation)
+  })
+
+  it('sorts the current and recently viewed repositories before alphabetical repositories', () => {
+    const repoAlpha = new Repository('alpha', 1, null, false)
+    const repoBravo = new Repository('bravo', 2, null, false)
+    const repoCharlie = new Repository('charlie', 3, null, false)
+    const repoDelta = new Repository('delta', 4, null, false)
+    const repoEcho = new Repository('echo', 5, null, false)
+
+    const grouped = groupRepositories(
+      [repoBravo, repoEcho, repoCharlie, repoAlpha, repoDelta],
+      cache,
+      [4, 5, 2, 4, 999],
+      5
+    )
+
+    assert.equal(grouped.length, 1)
+    assert.deepEqual(paths(grouped[0].items), [
+      'echo',
+      'delta',
+      'bravo',
+      'alpha',
+      'charlie',
+    ])
+  })
+
+  it('applies recent ordering independently within each repository group', () => {
+    const dotcomBravo = new Repository(
+      'bravo',
+      1,
+      gitHubRepoFixture({ owner: 'me', name: 'bravo' }),
+      false
+    )
+    const dotcomDelta = new Repository(
+      'delta',
+      2,
+      gitHubRepoFixture({ owner: 'me', name: 'delta' }),
+      false
+    )
+    const otherAlpha = new Repository('alpha', 3, null, false)
+    const otherZulu = new Repository('zulu', 4, null, false)
+
+    const grouped = groupRepositories(
+      [dotcomBravo, otherAlpha, dotcomDelta, otherZulu],
+      cache,
+      [2, 3, 1],
+      4
+    )
+
+    assert.equal(grouped.length, 2)
+    assert.equal(grouped[0].identifier.kind, 'dotcom')
+    assert.deepEqual(paths(grouped[0].items), ['delta', 'bravo'])
+    assert.equal(grouped[1].identifier.kind, 'other')
+    assert.deepEqual(paths(grouped[1].items), ['zulu', 'alpha'])
+  })
+
+  it('sorts the existing Recent group by most recently viewed order', () => {
+    const repositories = [
+      new Repository('alpha', 1, null, false),
+      new Repository('bravo', 2, null, false),
+      new Repository('charlie', 3, null, false),
+      new Repository('delta', 4, null, false),
+      new Repository('echo', 5, null, false),
+      new Repository('foxtrot', 6, null, false),
+      new Repository('golf', 7, null, false),
+      new Repository('zulu', 8, null, false),
+    ]
+
+    const grouped = groupRepositories(repositories, cache, [8, 1, 5], 4)
+
+    assert.equal(grouped.length, 2)
+    assert.equal(grouped[0].identifier.kind, 'recent')
+    assert.deepEqual(paths(grouped[0].items), ['zulu', 'alpha', 'echo'])
+    assert.equal(grouped[1].identifier.kind, 'other')
+    assert.deepEqual(paths(grouped[1].items).slice(0, 4), [
+      'delta',
+      'zulu',
+      'alpha',
+      'echo',
+    ])
   })
 })

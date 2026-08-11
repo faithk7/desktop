@@ -195,6 +195,12 @@ interface ICommitListProps {
   /** Load all remaining commits and follow the bottom of the list. */
   readonly onLoadAllAndGoToBottom?: () => void
 
+  /** Stop loading and following the remaining commit history. */
+  readonly onCancelLoadAllCommits?: () => void
+
+  /** Scroll to the first loaded commit. */
+  readonly onGoToTop?: () => void
+
   /** Stop following the bottom and return to the selected commit. */
   readonly onGoToSelectedCommit?: () => void
 
@@ -583,6 +589,12 @@ export class CommitList extends React.Component<
     }
   }
 
+  public scrollToTop() {
+    if (this.props.commitSHAs.length > 0) {
+      this.listRef.current?.scrollToRow(0)
+    }
+  }
+
   public scrollToSHA(sha: string) {
     const row = this.rowForSHA(sha)
     if (row >= 0) {
@@ -669,6 +681,10 @@ export class CommitList extends React.Component<
             onLoadAllAndGoToBottom={
               this.props.onLoadAllAndGoToBottom ?? (() => {})
             }
+            onCancelLoadAllCommits={
+              this.props.onCancelLoadAllCommits ?? (() => {})
+            }
+            onGoToTop={this.props.onGoToTop ?? (() => {})}
             onGoToSelectedCommit={this.props.onGoToSelectedCommit ?? (() => {})}
           />
         ) : null}

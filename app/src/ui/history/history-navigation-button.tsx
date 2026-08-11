@@ -10,6 +10,8 @@ interface IHistoryNavigationButtonProps {
   readonly isLoading: boolean
   readonly canGoToSelectedCommit: boolean
   readonly onLoadAllAndGoToBottom: () => void
+  readonly onCancelLoadAllCommits: () => void
+  readonly onGoToTop: () => void
   readonly onGoToSelectedCommit: () => void
 }
 
@@ -17,15 +19,26 @@ export function getHistoryNavigationMenuItems(
   isLoading: boolean,
   canGoToSelectedCommit: boolean,
   onLoadAllAndGoToBottom: () => void,
+  onCancelLoadAllCommits: () => void,
+  onGoToTop: () => void,
   onGoToSelectedCommit: () => void
 ): ReadonlyArray<IMenuItem> {
   return [
     {
-      label: __DARWIN__
+      label: isLoading
+        ? __DARWIN__
+          ? 'Stop Here'
+          : 'Stop here'
+        : __DARWIN__
         ? 'Load All and Go to Bottom'
         : 'Load all and go to bottom',
-      enabled: !isLoading,
-      action: onLoadAllAndGoToBottom,
+      enabled: true,
+      action: isLoading ? onCancelLoadAllCommits : onLoadAllAndGoToBottom,
+    },
+    {
+      label: __DARWIN__ ? 'Go to Top' : 'Go to top',
+      enabled: true,
+      action: onGoToTop,
     },
     {
       label: __DARWIN__ ? 'Go to Selected Commit' : 'Go to selected commit',
@@ -42,13 +55,17 @@ export class HistoryNavigationButton extends React.PureComponent<IHistoryNavigat
         this.props.isLoading,
         this.props.canGoToSelectedCommit,
         this.props.onLoadAllAndGoToBottom,
+        this.props.onCancelLoadAllCommits,
+        this.props.onGoToTop,
         this.props.onGoToSelectedCommit
       )
     )
   }
 
   private onClick = () => {
-    if (!this.props.isLoading) {
+    if (this.props.isLoading) {
+      this.props.onCancelLoadAllCommits()
+    } else {
       this.props.onLoadAllAndGoToBottom()
     }
   }
@@ -67,7 +84,7 @@ export class HistoryNavigationButton extends React.PureComponent<IHistoryNavigat
 
   public render() {
     const label = this.props.isLoading
-      ? 'Loading commit history…'
+      ? 'Stop loading commit history and stay here.'
       : 'Load all commits and go to bottom. Right-click for more options.'
 
     return (

@@ -95,6 +95,9 @@ interface ICompareSidebarState {
 /** If we're within this many rows from the bottom, load the next history batch. */
 const CloseToBottomThreshold = 10
 
+/** Maximum time to automatically load and follow commit history. */
+export const LoadAllCommitsTimeout = 10 * 60 * 1000
+
 export class CompareSidebar extends React.Component<
   ICompareSidebarProps,
   ICompareSidebarState
@@ -106,6 +109,7 @@ export class CompareSidebar extends React.Component<
   private loadingMoreCommitsPromise: Promise<boolean> | null = null
   private isLoadingAllCommits = false
   private loadAllGeneration = 0
+  private loadAllTimeoutID: number | null = null
   private isUnmounted = false
   private commitCountWaiter: {
     readonly previousCount: number
@@ -441,6 +445,8 @@ export class CompareSidebar extends React.Component<
         showHistoryNavigation={formState.kind === HistoryTabMode.History}
         isLoadingAllCommits={this.state.isLoadingAllCommits}
         onLoadAllAndGoToBottom={this.onLoadAllAndGoToBottom}
+        onCancelLoadAllCommits={this.onCancelLoadAllCommits}
+        onGoToTop={this.onGoToTop}
         onGoToSelectedCommit={this.onGoToSelectedCommit}
         readCommitSHAs={
           formState.kind === HistoryTabMode.History
@@ -551,6 +557,8 @@ export class CompareSidebar extends React.Component<
   }
 
   private cancelLoadAllCommits(updateState = true) {
+    this.clearLoadAllTimeout()
+
     if (!this.isLoadingAllCommits) {
       return
     }
@@ -565,6 +573,17 @@ export class CompareSidebar extends React.Component<
     }
   }
 
+  private clearLoadAllTimeout() {
+    if (this.loadAllTimeoutID !== null) {
+      window.clearTimeout(this.loadAllTimeoutID)
+      this.loadAllTimeoutID = null
+    }
+  }
+
+  private onCancelLoadAllCommits = () => {
+    this.cancelLoadAllCommits()
+  }
+
   private onLoadAllAndGoToBottom = async () => {
     if (this.isLoadingAllCommits || !this.isHistoryView()) {
       return
@@ -574,6 +593,11 @@ export class CompareSidebar extends React.Component<
     const generation = ++this.loadAllGeneration
     this.setState({ isLoadingAllCommits: true })
     this.commitListRef.current?.scrollToBottom()
+    this.loadAllTimeoutID = window.setTimeout(() => {
+      if (generation === this.loadAllGeneration) {
+        this.cancelLoadAllCommits()
+      }
+    }, LoadAllCommitsTimeout)
 
     try {
       while (generation === this.loadAllGeneration && this.isHistoryView()) {
@@ -601,12 +625,18 @@ export class CompareSidebar extends React.Component<
       }
     } finally {
       if (generation === this.loadAllGeneration) {
+        this.clearLoadAllTimeout()
         this.isLoadingAllCommits = false
         if (!this.isUnmounted) {
           this.setState({ isLoadingAllCommits: false })
         }
       }
     }
+  }
+
+  private onGoToTop = () => {
+    this.cancelLoadAllCommits()
+    this.commitListRef.current?.scrollToTop()
   }
 
   private onGoToSelectedCommit = async () => {

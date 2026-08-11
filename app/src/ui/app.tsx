@@ -57,6 +57,7 @@ import {
   BranchDropdown,
   WorktreeDropdown,
   RevertProgress,
+  ToolbarButton,
 } from './toolbar'
 import { iconForRepository, OcticonSymbol } from './octicons'
 import * as octicons from './octicons/octicons.generated'
@@ -227,6 +228,7 @@ import { RenameWorktreeDialog } from './worktrees/rename-worktree-dialog'
 import { DeleteWorktreeDialog } from './worktrees/delete-worktree-dialog'
 import { DeleteWorktreeFailedDialog } from './worktrees/delete-worktree-failed-dialog'
 import { WorktreeEntry } from '../models/worktree'
+import { Explorer, IExplorerSessionState } from './explorer'
 
 const MinuteInMilliseconds = 1000 * 60
 const HourInMilliseconds = MinuteInMilliseconds * 60
@@ -265,7 +267,12 @@ export const bannerTransitionTimeout = { enter: 500, exit: 400 }
  * changes. See https://github.com/desktop/desktop/issues/1398.
  */
 const ReadyDelay = 100
-export class App extends React.Component<IAppProps, IAppState> {
+type IAppComponentState = IAppState & {
+  readonly explorerOpen: boolean
+  readonly explorerSessionState: IExplorerSessionState | null
+}
+
+export class App extends React.Component<IAppProps, IAppComponentState> {
   private loading = true
 
   /**
@@ -316,7 +323,11 @@ export class App extends React.Component<IAppProps, IAppState> {
       )
     })
 
-    this.state = props.appStore.getState()
+    this.state = {
+      ...props.appStore.getState(),
+      explorerOpen: false,
+      explorerSessionState: null,
+    }
     props.appStore.onDidUpdate(state => {
       this.setState(state)
     })
@@ -3894,12 +3905,53 @@ export class App extends React.Component<IAppProps, IAppState> {
     this.props.dispatcher.clearBanner()
   }
 
+  private openExplorer = () => {
+    this.setState({ explorerOpen: true })
+  }
+
+  private closeExplorer = () => {
+    this.setState({ explorerOpen: false })
+  }
+
+  private toggleExplorer = () => {
+    this.setState(state => ({ explorerOpen: !state.explorerOpen }))
+  }
+
+  private onExplorerSessionStateChanged = (
+    explorerSessionState: IExplorerSessionState
+  ) => {
+    this.setState({ explorerSessionState })
+  }
+
   private renderToolbar() {
     /**
      * No toolbar if we're in the blank slate view.
      */
-    if (this.inNoRepositoriesViewState()) {
+    if (this.inNoRepositoriesViewState() && !this.state.explorerOpen) {
       return null
+    }
+
+    if (this.state.explorerOpen) {
+      return (
+        <Toolbar id="desktop-app-toolbar">
+          <ToolbarButton
+            className="explorer-toolbar-heading"
+            icon={octicons.telescope}
+            title="Explorer"
+            description="Discover repositories"
+            onClick={this.closeExplorer}
+          />
+          <div className="explorer-toolbar-spacer" />
+          <ToolbarButton
+            className="explorer-toolbar-button selected"
+            icon={octicons.telescopeFill}
+            title="Explore"
+            description="Search GitHub"
+            tooltip="Close Explorer"
+            onClick={this.toggleExplorer}
+          />
+        </Toolbar>
+      )
     }
 
     const width = clamp(this.state.sidebarWidth)
@@ -3912,12 +3964,36 @@ export class App extends React.Component<IAppProps, IAppState> {
         {this.renderWorktreeToolbarButton()}
         {this.renderBranchToolbarButton()}
         {this.renderPushPullToolbarButton()}
+        <div className="explorer-toolbar-spacer" />
+        <ToolbarButton
+          className="explorer-toolbar-button"
+          icon={octicons.telescope}
+          title="Explore"
+          description="Search GitHub"
+          tooltip="Explore GitHub repositories and topics"
+          onClick={this.openExplorer}
+        />
       </Toolbar>
     )
   }
 
   private renderRepository() {
     const { accounts } = this.state
+
+    if (this.state.explorerOpen) {
+      return (
+        <Explorer
+          accounts={accounts}
+          repositories={this.state.repositories}
+          cloningRepositoryStateLookup={this.state.cloningRepositoryStateLookup}
+          selectedState={this.state.selectedState}
+          dispatcher={this.props.dispatcher}
+          initialSessionState={this.state.explorerSessionState ?? undefined}
+          onSessionStateChanged={this.onExplorerSessionStateChanged}
+          onClose={this.closeExplorer}
+        />
+      )
+    }
 
     if (this.inNoRepositoriesViewState()) {
       return (

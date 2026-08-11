@@ -889,6 +889,11 @@ export class Dispatcher {
     })
   }
 
+  /** Cancel an active repository clone. */
+  public cancelClone(repository: CloningRepository) {
+    this.appStore._cancelClone(repository)
+  }
+
   /** Changes the repository alias to a new name. */
   public changeRepositoryAlias(
     repository: Repository,

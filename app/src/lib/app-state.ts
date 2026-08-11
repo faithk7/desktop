@@ -97,6 +97,9 @@ export interface IAppState {
    */
   readonly repositories: ReadonlyArray<Repository | CloningRepository>
 
+  /** Clone progress keyed by the active cloning repository's unique id. */
+  readonly cloningRepositoryStateLookup: ReadonlyMap<number, ICloneProgress>
+
   /**
    * List of IDs of the most recently opened repositories (most recent first)
    */

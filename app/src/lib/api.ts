@@ -160,6 +160,38 @@ export interface IAPIRepository {
   readonly archived: boolean
 }
 
+/** Repository metadata returned by GitHub's repository search endpoint. */
+export interface IAPIRepositorySearchItem extends IAPIRepository {
+  readonly description: string | null
+  readonly stargazers_count: number
+  readonly forks_count: number
+  readonly language: string | null
+  readonly topics: ReadonlyArray<string>
+  readonly updated_at: string
+  readonly visibility?: 'public' | 'private' | 'internal'
+  readonly owner: IAPIIdentity & { readonly avatar_url?: string }
+}
+
+/** Topic metadata returned by GitHub's topic search endpoint. */
+export interface IAPITopicSearchItem {
+  readonly name: string
+  readonly display_name: string | null
+  readonly short_description: string | null
+  readonly featured: boolean
+  readonly curated: boolean
+  readonly score: number
+  readonly stargazer_count?: number
+}
+
+/** The common response envelope used by GitHub search endpoints. */
+export interface IAPISearchResponse<T> {
+  readonly total_count: number
+  readonly incomplete_results: boolean
+  readonly items: ReadonlyArray<T>
+}
+
+export type RepositorySearchSort = 'stars' | 'updated'
+
 /** Information needed to clone a repository. */
 export interface IAPIRepositoryCloneInfo {
   /** Canonical clone URL of the repository. */
@@ -1026,6 +1058,84 @@ export class API {
     return {
       url: protocol === 'ssh' ? repo.ssh_url : repo.clone_url,
       defaultBranch: repo.default_branch,
+    }
+  }
+
+  /** Search repositories available to the authenticated account. */
+  public async searchRepositories(
+    query: string,
+    page: number,
+    perPage: number = 30,
+    sort?: RepositorySearchSort
+  ): Promise<IAPISearchResponse<IAPIRepositorySearchItem>> {
+    const path = urlWithQueryString('search/repositories', {
+      q: query,
+      page: `${page}`,
+      per_page: `${perPage}`,
+      ...(sort === undefined ? {} : { sort, order: 'desc' }),
+    })
+    const response = await this.ghRequest('GET', path)
+    return parsedResponse<IAPISearchResponse<IAPIRepositorySearchItem>>(
+      response
+    )
+  }
+
+  /** Search GitHub repository topics. */
+  public async searchTopics(
+    query: string,
+    page: number,
+    perPage: number = 100
+  ): Promise<IAPISearchResponse<IAPITopicSearchItem>> {
+    const path = urlWithQueryString('search/topics', {
+      q: query,
+      page: `${page}`,
+      per_page: `${perPage}`,
+    })
+    const response = await this.ghRequest('GET', path)
+    return parsedResponse<IAPISearchResponse<IAPITopicSearchItem>>(response)
+  }
+
+  /** Fetch topic popularity in one GraphQL request. */
+  public async fetchTopicStargazerCounts(
+    names: ReadonlyArray<string>
+  ): Promise<ReadonlyMap<string, number>> {
+    if (names.length === 0) {
+      return new Map()
+    }
+
+    const variables = new Map<string, string>()
+    const variableDefinitions = names.map((name, index) => {
+      variables.set(`topic${index}`, name)
+      return `$topic${index}: String!`
+    })
+    const selections = names.map(
+      (_, index) =>
+        `topic${index}: topic(name: $topic${index}) { stargazerCount }`
+    )
+    const query = `query ExplorerTopicPopularity(${variableDefinitions.join(
+      ', '
+    )}) { ${selections.join('\n')} }`
+
+    try {
+      const response = await this.ghRequest('POST', '/graphql', {
+        body: { query, variables: Object.fromEntries(variables) },
+      })
+      const result = (await response.json()) as {
+        readonly data?: Readonly<
+          Record<string, { readonly stargazerCount: number } | null>
+        >
+      }
+      const counts = new Map<string, number>()
+      names.forEach((name, index) => {
+        const count = result.data?.[`topic${index}`]?.stargazerCount
+        if (count !== undefined) {
+          counts.set(name, count)
+        }
+      })
+      return counts
+    } catch (error) {
+      log.warn('Unable to fetch Explorer topic popularity', error)
+      return new Map()
     }
   }
 

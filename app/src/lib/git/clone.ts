@@ -64,12 +64,15 @@ function isClonePathSensitive(unresolvedClonePath: string): boolean {
  *                           of the clone operation. When provided this enables
  *                           the '--progress' command line flag for
  *                           'git clone'.
+ *
+ * @param signal - An optional abort signal used to cancel the clone process.
  */
 export async function clone(
   url: string,
   path: string,
   options: CloneOptions,
-  progressCallback?: (progress: ICloneProgress) => void
+  progressCallback?: (progress: ICloneProgress) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   if (isClonePathSensitive(path)) {
     throw new Error(
@@ -92,7 +95,7 @@ export async function clone(
     '--recursive',
   ]
 
-  let opts: IGitStringExecutionOptions = { env }
+  let opts: IGitStringExecutionOptions = { env, signal }
 
   if (progressCallback) {
     args.push('--progress')

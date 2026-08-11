@@ -1283,6 +1283,8 @@ export class AppStore extends TypedBaseStore<IAppState> {
     return {
       accounts: this.accounts,
       repositories,
+      cloningRepositoryStateLookup:
+        this.cloningRepositoriesStore.repositoryStateLookup,
       recentRepositories: this.recentRepositories,
       localRepositoryStateLookup: this.localRepositoryStateLookup,
       windowState: this.windowState,
@@ -5983,6 +5985,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
   public _removeCloningRepository(repository: CloningRepository) {
     this.cloningRepositoriesStore.remove(repository)
+  }
+
+  public _cancelClone(repository: CloningRepository) {
+    this.cloningRepositoriesStore.cancel(repository)
   }
 
   public async _discardChanges(

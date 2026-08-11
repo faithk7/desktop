@@ -1,7 +1,17 @@
 type CommitReadShortcutEvent = Pick<
   KeyboardEvent,
-  'altKey' | 'code' | 'ctrlKey' | 'metaKey' | 'repeat' | 'shiftKey'
+  'altKey' | 'code' | 'ctrlKey' | 'metaKey' | 'repeat' | 'shiftKey' | 'target'
 >
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.matches('input, textarea, select') ||
+      target.isContentEditable ||
+      target.closest('[contenteditable]:not([contenteditable="false"])') !==
+        null)
+  )
+}
 
 export function isToggleCommitReadShortcut(
   event: CommitReadShortcutEvent,
@@ -10,10 +20,11 @@ export function isToggleCommitReadShortcut(
   return (
     isDarwin &&
     !event.repeat &&
-    event.altKey &&
+    !event.altKey &&
     !event.ctrlKey &&
     !event.metaKey &&
     !event.shiftKey &&
-    event.code === 'KeyC'
+    event.code === 'KeyV' &&
+    !isEditableTarget(event.target)
   )
 }

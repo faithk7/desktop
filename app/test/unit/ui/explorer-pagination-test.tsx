@@ -193,6 +193,81 @@ describe('Explorer search and repository pagination', () => {
     assert.equal(input.value, '')
   })
 
+  it('shows sorted results refresh while keeping the current cards visible', async () => {
+    const initial = repository('best-match')
+    const sorted = repository('most-stars')
+    const requestedSorts = new Array<string | undefined>()
+    let resolveSorted: (
+      value: IAPISearchResponse<IAPIRepositorySearchItem>
+    ) => void = () => {}
+    const sortedResults = new Promise<
+      IAPISearchResponse<IAPIRepositorySearchItem>
+    >(resolve => {
+      resolveSorted = resolve
+    })
+
+    API.fromAccount = () =>
+      ({
+        searchRepositories: (
+          _query: string,
+          _page: number,
+          _perPage: number,
+          sort?: string
+        ) => {
+          requestedSorts.push(sort)
+          return sort === 'stars'
+            ? sortedResults
+            : Promise.resolve(results(initial, 1))
+        },
+      } as unknown as API)
+
+    const view = render(
+      <Explorer
+        accounts={[Account.anonymous()]}
+        repositories={[]}
+        cloningRepositoryStateLookup={new Map()}
+        selectedState={null}
+        dispatcher={{} as Dispatcher}
+        initialSessionState={{
+          page: ExplorerPage.Search,
+          repositoryQuery: 'desktop',
+          topicQuery: '',
+          repositorySort: ExplorerRepositorySort.BestMatch,
+          topicFilter: ExplorerTopicFilter.All,
+          repositoryPage: 1,
+          topicPage: 1,
+          repositoryResults: results(initial, 1),
+          topicResults: null,
+          popularTopics: [],
+          selectedTopic: null,
+          popularTopicsScrollTop: 0,
+        }}
+        onSessionStateChanged={() => {}}
+        onClose={() => {}}
+      />
+    )
+
+    const section = view.container.querySelector('.explorer-search-page')
+    assert.ok(section instanceof HTMLElement)
+    assert.ok(screen.getByText('best-match', { selector: 'strong' }))
+
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: ExplorerRepositorySort.Stars },
+    })
+
+    await waitFor(() => assert.deepEqual(requestedSorts, ['stars']))
+    assert.equal(section.getAttribute('aria-busy'), 'true')
+    assert.ok(screen.getByText('best-match', { selector: 'strong' }))
+    assert.ok(screen.getByLabelText('Updating repository results'))
+
+    resolveSorted(results(sorted, 1))
+    await waitFor(() =>
+      assert.ok(screen.getByText('most-stars', { selector: 'strong' }))
+    )
+    assert.equal(section.getAttribute('aria-busy'), 'false')
+    assert.equal(screen.queryByLabelText('Updating repository results'), null)
+  })
+
   it('searches topics only when Enter is pressed', async () => {
     const queries = new Array<string>()
     const account = Account.anonymous()

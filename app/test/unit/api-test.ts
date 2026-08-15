@@ -174,4 +174,32 @@ describe('API', () => {
       )
     })
   })
+
+  describe('searchRepositories', () => {
+    it('includes the selected sort and descending order', async () => {
+      const paths = new Array<string>()
+      const api = new API('https://api.github.com', 'token')
+      Reflect.set(
+        api,
+        'request',
+        async (_endpoint: string, _method: string, path: string) => {
+          paths.push(path)
+          return new Response(
+            JSON.stringify({
+              total_count: 0,
+              incomplete_results: false,
+              items: [],
+            })
+          )
+        }
+      )
+
+      await api.searchRepositories('topic:agent-infrastructure', 1, 30, 'stars')
+
+      assert.equal(paths.length, 1)
+      const query = URL.parse(paths[0], true).query
+      assert.equal(query.sort, 'stars')
+      assert.equal(query.order, 'desc')
+    })
+  })
 })

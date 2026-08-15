@@ -1283,7 +1283,11 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     return (
       <div className="explorer-search-layout">
         {this.renderPopularTopics()}
-        <section className="explorer-search-page" ref={this.searchResultsRef}>
+        <section
+          className="explorer-search-page"
+          ref={this.searchResultsRef}
+          aria-busy={this.state.loadingRepositories}
+        >
           <div className="explorer-search-header">
             <div className="explorer-search-controls">
               <TextBox
@@ -1338,7 +1342,16 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
             </div>
           ) : (
             <>
-              <div className="explorer-results-summary">{message}</div>
+              <div className="explorer-results-summary">
+                {message}
+                {this.state.loadingRepositories && (
+                  <Octicon
+                    symbol={octicons.sync}
+                    className="spin"
+                    title="Updating repository results"
+                  />
+                )}
+              </div>
               <div className="explorer-card-grid">
                 {results.items.map(this.renderRepositoryCard)}
               </div>

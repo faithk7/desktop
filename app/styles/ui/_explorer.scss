@@ -205,8 +205,7 @@
   z-index: var(--list-sticky-header-top-level-z-index);
   top: calc(-1 * var(--spacing-double));
   display: flow-root;
-  margin: calc(-1 * var(--spacing-double))
-    calc(-1 * var(--spacing-double)) 0;
+  margin: calc(-1 * var(--spacing-double)) calc(-1 * var(--spacing-double)) 0;
   padding: var(--spacing-double) var(--spacing-double) 0;
   background: var(--background-color);
 }
@@ -240,6 +239,9 @@
 }
 
 .explorer-results-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-half);
   margin-bottom: var(--spacing);
   color: var(--text-secondary-color);
 }

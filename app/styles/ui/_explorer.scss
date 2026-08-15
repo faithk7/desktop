@@ -73,13 +73,26 @@
 
 .explorer-clone-queue-button {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   min-width: 32px;
-  height: 28px;
+  height: 40px;
   padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-secondary-color);
+  background: transparent;
+
+  &:hover {
+    color: var(--text-color);
+    background: var(--box-alt-background-color);
+  }
 
   .octicon {
-    width: 16px;
+    width: 24px;
+    height: 24px;
   }
 }
 

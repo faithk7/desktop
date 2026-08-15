@@ -201,7 +201,7 @@ export class CloneQueue extends React.Component<ICloneQueueProps> {
           onButtonRef={this.onButtonRef}
           onClick={this.props.onToggle}
         >
-          <Octicon symbol={octicons.stack} />
+          <Octicon symbol={octicons.stack} height={24} />
           {activeCount > 0 && (
             <span className="explorer-clone-queue-count" aria-hidden="true">
               {activeCount}

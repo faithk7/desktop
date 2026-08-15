@@ -1285,6 +1285,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       repositories,
       cloningRepositoryStateLookup:
         this.cloningRepositoriesStore.repositoryStateLookup,
+      cloneQueue: this.cloningRepositoriesStore.queue,
       recentRepositories: this.recentRepositories,
       localRepositoryStateLookup: this.localRepositoryStateLookup,
       windowState: this.windowState,
@@ -5981,6 +5982,42 @@ export class AppStore extends TypedBaseStore<IAppState> {
     })
 
     return { promise, repository }
+  }
+
+  /** Start a clone without selecting it when it starts or completes. */
+  public _cloneInBackground(
+    url: string,
+    path: string,
+    options: { branch?: string; defaultBranch?: string } = {}
+  ) {
+    const { promise } = this._clone(url, path, options)
+    void promise
+      .then(async success => {
+        if (success) {
+          await this._addRepositories([path])
+        }
+      })
+      .catch(error => this.emitError(error))
+  }
+
+  /** Retry a failed background clone without changing the selected repository. */
+  public _retryCloneInBackground(id: number, path?: string) {
+    const retry = this.cloningRepositoriesStore.retry(id, path)
+    if (retry === null) {
+      return
+    }
+
+    void retry.promise
+      .then(async success => {
+        if (success) {
+          await this._addRepositories([retry.repository.path])
+        }
+      })
+      .catch(error => this.emitError(error))
+  }
+
+  public _dismissCloneQueueEntry(id: number) {
+    this.cloningRepositoriesStore.dismiss(id)
   }
 
   public _removeCloningRepository(repository: CloningRepository) {

@@ -69,6 +69,7 @@ import { IAPIRepoRuleset } from './api'
 import { ICustomIntegration } from './custom-integration'
 import { Emoji } from './emoji'
 import { IUpdateState } from '../ui/lib/update-store'
+import { ICloneQueueEntry } from '../models/clone-queue'
 
 export enum SelectionType {
   Repository,
@@ -99,6 +100,9 @@ export interface IAppState {
 
   /** Clone progress keyed by the active cloning repository's unique id. */
   readonly cloningRepositoryStateLookup: ReadonlyMap<number, ICloneProgress>
+
+  /** Active and failed clone jobs for the current app session. */
+  readonly cloneQueue: ReadonlyArray<ICloneQueueEntry>
 
   /**
    * List of IDs of the most recently opened repositories (most recent first)

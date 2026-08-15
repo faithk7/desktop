@@ -5,6 +5,7 @@ import { readdir } from 'fs/promises'
 import { Account } from '../../models/account'
 import { Repository } from '../../models/repository'
 import { CloningRepository } from '../../models/cloning-repository'
+import { ICloneQueueEntry } from '../../models/clone-queue'
 import { ICloneProgress } from '../../models/progress'
 import {
   CommitHistoryOrder,
@@ -45,11 +46,13 @@ import { Octicon } from '../octicons'
 import * as octicons from '../octicons/octicons.generated'
 import { AriaLiveContainer } from '../accessibility/aria-live-container'
 import { showOpenDialog } from '../main-process-proxy'
+import { CloneQueue } from './clone-queue'
 
 interface IExplorerProps {
   readonly accounts: ReadonlyArray<Account>
   readonly repositories: ReadonlyArray<Repository | CloningRepository>
   readonly cloningRepositoryStateLookup: ReadonlyMap<number, ICloneProgress>
+  readonly cloneQueue?: ReadonlyArray<ICloneQueueEntry>
   readonly selectedState: PossibleSelections | null
   readonly dispatcher: Dispatcher
   readonly initialSessionState?: IExplorerSessionState
@@ -88,6 +91,7 @@ interface IExplorerState extends IExplorerSessionState {
   readonly loadingPopularTopics: boolean
   readonly error: string | null
   readonly activeClones: ReadonlyMap<string, IActiveClone>
+  readonly cloneQueueOpen: boolean
 }
 
 const RepositoryPageSize = 30
@@ -121,7 +125,6 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
   private popularTopicsPromise: Promise<
     ReadonlyArray<IAPITopicSearchItem>
   > | null = null
-  private readonly cloneCancellationRequests = new Set<string>()
   private readonly cloneStartRequests = new Set<string>()
   private readonly cloneDestinationReservations = new Map<string, string>()
   private readonly repositoryPageCache = new Map<
@@ -169,6 +172,7 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
       loadingPopularTopics: false,
       error: null,
       activeClones: new Map(),
+      cloneQueueOpen: false,
     }
   }
 
@@ -257,6 +261,18 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
           },
           this.loadPopularTopics
         )
+      }
+    }
+
+    if (this.props.cloneQueue !== prevProps.cloneQueue) {
+      const queuedURLs = new Set(this.getCloneQueue().map(entry => entry.url))
+      const activeClones = new Map(
+        Array.from(this.state.activeClones).filter(([url]) =>
+          this.props.cloneQueue === undefined ? true : !queuedURLs.has(url)
+        )
+      )
+      if (activeClones.size !== this.state.activeClones.size) {
+        this.setState({ activeClones })
       }
     }
   }
@@ -866,30 +882,24 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     this.cloneDestinationReservations.set(cloneUrl, path)
     this.updateActiveClone(cloneUrl, { repository: item, path, error: null })
     this.setState({ error: null })
-    this.cloneCancellationRequests.delete(cloneUrl)
-    let repository: Repository | null
     try {
-      repository = await this.props.dispatcher.clone(item.clone_url, path, {
-        defaultBranch: item.default_branch,
-      })
+      if (typeof this.props.dispatcher.cloneInBackground === 'function') {
+        this.props.dispatcher.cloneInBackground(item.clone_url, path, {
+          defaultBranch: item.default_branch,
+        })
+      } else {
+        // Keep lightweight Explorer test dispatchers and older integrations
+        // compatible while the app dispatcher adopts the background API.
+        void this.props.dispatcher
+          .clone(item.clone_url, path, {
+            defaultBranch: item.default_branch,
+          })
+          .then(() => this.updateActiveClone(cloneUrl, null))
+      }
     } finally {
       this.cloneStartRequests.delete(cloneUrl)
       this.cloneDestinationReservations.delete(cloneUrl)
     }
-    if (repository === null) {
-      if (this.cloneCancellationRequests.delete(cloneUrl)) {
-        this.updateActiveClone(cloneUrl, null)
-        return
-      }
-      this.updateActiveClone(cloneUrl, {
-        repository: item,
-        path,
-        error: 'Clone failed. Check your connection and try again.',
-      })
-      return
-    }
-
-    this.updateActiveClone(cloneUrl, null)
   }
 
   private getCloneDestinationError(
@@ -898,6 +908,9 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
   ): string | null {
     const activeDestinations = [
       ...this.props.repositories,
+      ...this.getCloneQueue()
+        .filter(entry => entry.url !== cloneUrl)
+        .map(entry => ({ path: entry.path })),
       ...Array.from(this.state.activeClones.entries())
         .filter(([url]) => url !== cloneUrl)
         .map(([, clone]) => clone),
@@ -940,7 +953,6 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     const cloneUrl = event.currentTarget.id
     const cloningRepository = this.findCloningRepository(cloneUrl)
     if (cloningRepository !== null) {
-      this.cloneCancellationRequests.add(cloneUrl)
       this.props.dispatcher.cancelClone(cloningRepository)
     }
   }
@@ -1034,6 +1046,11 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
   }
 
   private getCloneProgress(item: IAPIRepositorySearchItem) {
+    const queuedClone = this.findCloneQueueEntry(item.clone_url)
+    if (queuedClone?.status === 'active') {
+      return queuedClone.progress
+    }
+
     const cloningRepository = this.findCloningRepository(item.clone_url)
     if (cloningRepository !== null) {
       const progress = this.props.cloningRepositoryStateLookup.get(
@@ -1054,11 +1071,86 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
     return null
   }
 
+  private findCloneQueueEntry(cloneUrl: string): ICloneQueueEntry | null {
+    return this.getCloneQueue().find(entry => entry.url === cloneUrl) ?? null
+  }
+
+  private getCloneQueue(): ReadonlyArray<ICloneQueueEntry> {
+    return this.props.cloneQueue ?? []
+  }
+
+  private toggleCloneQueue = () => {
+    this.setState(state => ({ cloneQueueOpen: !state.cloneQueueOpen }))
+  }
+
+  private closeCloneQueue = () => {
+    if (this.state.cloneQueueOpen) {
+      this.setState({ cloneQueueOpen: false })
+    }
+  }
+
+  private cancelQueuedClone = (entry: ICloneQueueEntry) => {
+    if (entry.repository !== null) {
+      this.props.dispatcher.cancelClone(entry.repository)
+    }
+  }
+
+  private retryQueuedClone = (entry: ICloneQueueEntry) => {
+    this.props.dispatcher.retryCloneInBackground(entry.id)
+  }
+
+  private chooseQueuedCloneLocation = async (entry: ICloneQueueEntry) => {
+    const parent = await showOpenDialog({
+      properties: ['createDirectory', 'openDirectory'],
+    })
+    if (parent === null) {
+      return
+    }
+
+    const safeName = sanitizeCloneName(entry.name)
+    if (safeName !== null) {
+      this.props.dispatcher.retryCloneInBackground(
+        entry.id,
+        Path.join(parent, safeName)
+      )
+    }
+  }
+
+  private dismissQueuedClone = (entry: ICloneQueueEntry) => {
+    this.props.dispatcher.dismissCloneQueueEntry(entry.id)
+  }
+
+  private retryQueuedCloneFromCard = (
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    const entry = this.getCloneQueue().find(
+      value => value.id === Number(event.currentTarget.id)
+    )
+    if (entry !== undefined) {
+      this.retryQueuedClone(entry)
+    }
+  }
+
+  private chooseQueuedCloneLocationFromCard = (
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    const entry = this.getCloneQueue().find(
+      value => value.id === Number(event.currentTarget.id)
+    )
+    if (entry !== undefined) {
+      void this.chooseQueuedCloneLocation(entry)
+    }
+  }
+
   private renderRepositoryCard = (item: IAPIRepositorySearchItem) => {
     const local = this.findLocalRepository(item)
     const activeClone = this.state.activeClones.get(item.clone_url)
+    const queuedClone = this.findCloneQueueEntry(item.clone_url)
+    const failedClone = queuedClone?.status === 'failed' ? queuedClone : null
+    const cloneError = activeClone?.error ?? failedClone?.error ?? null
     const isActive =
-      activeClone !== undefined ||
+      queuedClone?.status === 'active' ||
+      (activeClone !== undefined && activeClone.error === null) ||
       this.findCloningRepository(item.clone_url) !== null
     const progress = this.getCloneProgress(item)
     const description = item.description ?? 'No repository description.'
@@ -1100,21 +1192,37 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
           {item.topics.length > 4 && <span>+{item.topics.length - 4}</span>}
         </div>
         <div className="explorer-card-footer">
-          {activeClone !== undefined && activeClone.error !== null ? (
+          {cloneError !== null ? (
             <div className="explorer-clone-error">
-              <span>{activeClone.error}</span>
+              <span>{cloneError}</span>
               <div>
                 <Button
                   size="small"
-                  id={item.clone_url}
-                  onClick={this.retryActiveClone}
+                  id={
+                    failedClone === null
+                      ? item.clone_url
+                      : String(failedClone.id)
+                  }
+                  onClick={
+                    failedClone === null
+                      ? this.retryActiveClone
+                      : this.retryQueuedCloneFromCard
+                  }
                 >
                   Retry
                 </Button>
                 <Button
                   size="small"
-                  id={item.clone_url}
-                  onClick={this.chooseActiveCloneLocation}
+                  id={
+                    failedClone === null
+                      ? item.clone_url
+                      : String(failedClone.id)
+                  }
+                  onClick={
+                    failedClone === null
+                      ? this.chooseActiveCloneLocation
+                      : this.chooseQueuedCloneLocationFromCard
+                  }
                 >
                   Choose location…
                 </Button>
@@ -1518,6 +1626,16 @@ export class Explorer extends React.Component<IExplorerProps, IExplorerState> {
           >
             Tags
           </button>
+          <CloneQueue
+            entries={this.getCloneQueue()}
+            isOpen={this.state.cloneQueueOpen}
+            onToggle={this.toggleCloneQueue}
+            onClose={this.closeCloneQueue}
+            onCancel={this.cancelQueuedClone}
+            onRetry={this.retryQueuedClone}
+            onChooseLocation={this.chooseQueuedCloneLocation}
+            onDismiss={this.dismissQueuedClone}
+          />
         </nav>
         <div className="explorer-page-content">
           {this.state.page === ExplorerPage.Search

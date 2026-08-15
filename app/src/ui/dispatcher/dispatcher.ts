@@ -889,6 +889,25 @@ export class Dispatcher {
     })
   }
 
+  /** Clone a repository while leaving the currently selected view unchanged. */
+  public cloneInBackground(
+    url: string,
+    path: string,
+    options?: { branch?: string; defaultBranch?: string }
+  ): void {
+    this.appStore._cloneInBackground(url, path, options)
+  }
+
+  /** Retry a failed background clone without changing the selected view. */
+  public retryCloneInBackground(id: number, path?: string): void {
+    this.appStore._retryCloneInBackground(id, path)
+  }
+
+  /** Remove a failed background clone from the queue. */
+  public dismissCloneQueueEntry(id: number): void {
+    this.appStore._dismissCloneQueueEntry(id)
+  }
+
   /** Cancel an active repository clone. */
   public cancelClone(repository: CloningRepository) {
     this.appStore._cancelClone(repository)

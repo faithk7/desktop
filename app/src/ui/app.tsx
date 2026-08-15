@@ -3986,6 +3986,7 @@ export class App extends React.Component<IAppProps, IAppComponentState> {
           accounts={accounts}
           repositories={this.state.repositories}
           cloningRepositoryStateLookup={this.state.cloningRepositoryStateLookup}
+          cloneQueue={this.state.cloneQueue}
           selectedState={this.state.selectedState}
           dispatcher={this.props.dispatcher}
           initialSessionState={this.state.explorerSessionState ?? undefined}

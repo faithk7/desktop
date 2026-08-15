@@ -2,6 +2,7 @@ import { CloningRepository } from '../../models/cloning-repository'
 import { ICloneProgress } from '../../models/progress'
 import { CloneOptions } from '../../models/clone-options'
 import { RetryAction, RetryActionType } from '../../models/retry-actions'
+import { ICloneQueueEntry } from '../../models/clone-queue'
 
 import { clone as cloneRepo } from '../git'
 import { ErrorWithMetadata } from '../error-with-metadata'
@@ -15,6 +16,7 @@ export class CloningRepositoriesStore extends BaseStore {
   private readonly stateByID = new Map<number, ICloneProgress>()
   private readonly abortControllerByID = new Map<number, AbortController>()
   private readonly cancelledRepositoryIDs = new Set<number>()
+  private readonly queueByID = new Map<number, ICloneQueueEntry>()
 
   /**
    * Clone the repository at the URL to the path.
@@ -34,6 +36,17 @@ export class CloningRepositoriesStore extends BaseStore {
     const title = `Cloning into ${path}`
 
     this.stateByID.set(repository.id, { kind: 'clone', title, value: 0 })
+    this.queueByID.set(repository.id, {
+      id: repository.id,
+      name: repository.name,
+      url,
+      path,
+      options,
+      status: 'active',
+      repository,
+      progress: { kind: 'clone', title, value: 0 },
+      error: null,
+    })
     this.emitUpdate()
 
     const destinationExisted = await pathExists(path)
@@ -46,6 +59,13 @@ export class CloningRepositoriesStore extends BaseStore {
         options,
         progress => {
           this.stateByID.set(repository.id, progress)
+          const queueEntry = this.queueByID.get(repository.id)
+          if (queueEntry !== undefined) {
+            this.queueByID.set(repository.id, {
+              ...queueEntry,
+              progress,
+            })
+          }
           this.emitUpdate()
         },
         abortController.signal
@@ -62,6 +82,19 @@ export class CloningRepositoriesStore extends BaseStore {
           options,
         }
         e = new ErrorWithMetadata(e, { retryAction, repository })
+
+        const error = e instanceof Error ? e.message : String(e)
+        this.queueByID.set(repository.id, {
+          id: repository.id,
+          name: repository.name,
+          url,
+          path,
+          options,
+          status: 'failed',
+          repository: null,
+          progress: this.stateByID.get(repository.id) ?? null,
+          error,
+        })
 
         this.emitError(e)
       }
@@ -98,6 +131,44 @@ export class CloningRepositoriesStore extends BaseStore {
     return Array.from(this._repositories)
   }
 
+  /** Get active and failed clone jobs for the current app session. */
+  public get queue(): ReadonlyArray<ICloneQueueEntry> {
+    return Array.from(this.queueByID.values())
+  }
+
+  /** Retry a failed clone, optionally using a new destination. */
+  public retry(
+    id: number,
+    path?: string
+  ): { promise: Promise<boolean>; repository: CloningRepository } | null {
+    const entry = this.queueByID.get(id)
+    if (entry === undefined || entry.status !== 'failed') {
+      return null
+    }
+
+    this.queueByID.delete(id)
+    this.emitUpdate()
+
+    const retryPath = path ?? entry.path
+    const promise = this.clone(entry.url, retryPath, entry.options)
+    const repository = this._repositories.find(
+      candidate => candidate.url === entry.url && candidate.path === retryPath
+    )
+
+    return repository === undefined ? null : { promise, repository }
+  }
+
+  /** Dismiss a failed clone from the current session's queue. */
+  public dismiss(id: number) {
+    const entry = this.queueByID.get(id)
+    if (entry?.status !== 'failed') {
+      return
+    }
+
+    this.queueByID.delete(id)
+    this.emitUpdate()
+  }
+
   /** Get a snapshot of every active clone's progress, keyed by repository id. */
   public get repositoryStateLookup(): ReadonlyMap<number, ICloneProgress> {
     return new Map(this.stateByID)
@@ -113,6 +184,11 @@ export class CloningRepositoriesStore extends BaseStore {
   /** Remove the repository. */
   public remove(repository: CloningRepository) {
     this.stateByID.delete(repository.id)
+
+    const queueEntry = this.queueByID.get(repository.id)
+    if (queueEntry?.status === 'active') {
+      this.queueByID.delete(repository.id)
+    }
 
     const repoIndex = this._repositories.findIndex(r => r.id === repository.id)
     if (repoIndex > -1) {

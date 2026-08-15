@@ -259,6 +259,19 @@ export class Dispatcher {
     this.appStore._clearCommitReadStatus(repository)
   }
 
+  /** Toggle bookmarks for the given commits in this repository. */
+  public toggleCommitBookmark(
+    repository: Repository,
+    commitSHAs: ReadonlyArray<string>
+  ): void {
+    this.appStore._toggleCommitBookmark(repository, commitSHAs)
+  }
+
+  /** Clear all commit bookmarks in this repository. */
+  public clearCommitBookmarks(repository: Repository): void {
+    this.appStore._clearCommitBookmarks(repository)
+  }
+
   /** Load the changed files for the current history selection. */
   public loadChangedFilesForCurrentSelection(
     repository: Repository

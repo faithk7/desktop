@@ -556,6 +556,9 @@ export interface IRepositoryState {
   /** The commits the user has marked as read in this repository. */
   readonly readCommitSHAs: ReadonlySet<string>
 
+  /** The commits the user has bookmarked in this repository. */
+  readonly bookmarkedCommitSHAs: ReadonlySet<string>
+
   /**
    * The state of the current pull request view in the repository.
    *

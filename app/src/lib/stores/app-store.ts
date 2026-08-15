@@ -308,6 +308,10 @@ import {
   storeRepositoryReadCommitSHAs,
   toggleReadCommitSHAs,
 } from '../commit-read-status'
+import {
+  storeRepositoryBookmarkedCommitSHAs,
+  toggleBookmarkedCommitSHAs,
+} from '../commit-bookmarks'
 import { ExternalEditorError, suggestedExternalEditor } from '../editors/shared'
 import { ApiRepositoriesStore } from './api-repositories-store'
 import {
@@ -2156,6 +2160,42 @@ export class AppStore extends TypedBaseStore<IAppState> {
     const readCommitSHAs = new Set<string>()
     this.repositoryStateCache.update(repository, () => ({ readCommitSHAs }))
     storeRepositoryReadCommitSHAs(repository, readCommitSHAs)
+    this.emitUpdate()
+  }
+
+  /** This shouldn't be called directly. See `Dispatcher`. */
+  public _toggleCommitBookmark(
+    repository: Repository,
+    commitSHAs: ReadonlyArray<string>
+  ): void {
+    if (commitSHAs.length === 0) {
+      return
+    }
+
+    const bookmarkedCommitSHAs = toggleBookmarkedCommitSHAs(
+      this.repositoryStateCache.get(repository).bookmarkedCommitSHAs,
+      commitSHAs
+    )
+
+    this.repositoryStateCache.update(repository, () => ({
+      bookmarkedCommitSHAs,
+    }))
+    storeRepositoryBookmarkedCommitSHAs(repository, bookmarkedCommitSHAs)
+    this.emitUpdate()
+  }
+
+  /** This shouldn't be called directly. See `Dispatcher`. */
+  public _clearCommitBookmarks(repository: Repository): void {
+    const state = this.repositoryStateCache.get(repository)
+    if (state.bookmarkedCommitSHAs.size === 0) {
+      return
+    }
+
+    const bookmarkedCommitSHAs = new Set<string>()
+    this.repositoryStateCache.update(repository, () => ({
+      bookmarkedCommitSHAs,
+    }))
+    storeRepositoryBookmarkedCommitSHAs(repository, bookmarkedCommitSHAs)
     this.emitUpdate()
   }
 

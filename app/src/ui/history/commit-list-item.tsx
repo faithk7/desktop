@@ -53,6 +53,8 @@ interface ICommitProps {
   readonly preferAbsoluteDates: boolean
   readonly isRead?: boolean
   readonly onToggleReadStatus?: (commit: Commit) => void
+  readonly isBookmarked?: boolean
+  readonly onToggleBookmark?: (commit: Commit) => void
 }
 
 interface ICommitListItemState {
@@ -175,7 +177,7 @@ export class CommitListItem extends React.PureComponent<
             </div>
           </div>
           {this.renderCommitIndicators()}
-          {this.renderReadStatus()}
+          {this.renderCommitActions()}
         </div>
       </Draggable>
     )
@@ -224,6 +226,38 @@ export class CommitListItem extends React.PureComponent<
     this.props.onToggleReadStatus?.(this.props.commit)
   }
 
+  private stopBookmarkPointerEvent = (
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    event.stopPropagation()
+  }
+
+  private stopBookmarkKeyboardEvent = (
+    event: React.KeyboardEvent<HTMLButtonElement>
+  ) => {
+    event.stopPropagation()
+  }
+
+  private onBookmarkChanged = () => {
+    this.props.onToggleBookmark?.(this.props.commit)
+  }
+
+  private renderCommitActions() {
+    if (
+      this.props.onToggleReadStatus === undefined &&
+      this.props.onToggleBookmark === undefined
+    ) {
+      return null
+    }
+
+    return (
+      <div className="commit-actions">
+        {this.renderBookmark()}
+        {this.renderReadStatus()}
+      </div>
+    )
+  }
+
   private renderReadStatus() {
     if (this.props.onToggleReadStatus === undefined) {
       return null
@@ -251,6 +285,48 @@ export class CommitListItem extends React.PureComponent<
           onMouseDown={this.stopReadStatusPointerEvent}
           onClick={this.stopReadStatusPointerEvent}
         />
+      </TooltippedContent>
+    )
+  }
+
+  private renderBookmark() {
+    if (this.props.onToggleBookmark === undefined) {
+      return null
+    }
+
+    const isBookmarked = this.props.isBookmarked === true
+    const tooltip = isBookmarked
+      ? 'Remove bookmark (B)'
+      : 'Bookmark commit (B)'
+    const summary =
+      this.props.commit.summary.length > 0
+        ? this.props.commit.summary
+        : 'Empty commit message'
+
+    return (
+      <TooltippedContent
+        tagName="div"
+        className="commit-bookmark"
+        tooltip={tooltip}
+      >
+        <button
+          type="button"
+          className="commit-bookmark-control"
+          aria-label={`${isBookmarked ? 'Remove bookmark from' : 'Bookmark'} commit: ${summary}`}
+          aria-pressed={isBookmarked}
+          tabIndex={0}
+          onClick={this.onBookmarkChanged}
+          onMouseDown={this.stopBookmarkPointerEvent}
+          onKeyDown={this.stopBookmarkKeyboardEvent}
+        >
+          <span className="commit-bookmark-icon">
+            <Octicon
+              symbol={
+                isBookmarked ? octicons.bookmarkFilled : octicons.bookmark
+              }
+            />
+          </span>
+        </button>
       </TooltippedContent>
     )
   }

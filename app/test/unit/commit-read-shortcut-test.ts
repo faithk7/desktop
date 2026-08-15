@@ -1,7 +1,10 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
 
-import { isToggleCommitReadShortcut } from '../../src/ui/history/commit-read-shortcut'
+import {
+  isToggleCommitBookmarkShortcut,
+  isToggleCommitReadShortcut,
+} from '../../src/ui/history/commit-read-shortcut'
 
 function shortcutEvent(
   overrides: Partial<Parameters<typeof isToggleCommitReadShortcut>[0]> = {}
@@ -76,6 +79,29 @@ describe('commit read shortcut', () => {
     assert.equal(
       isToggleCommitReadShortcut(
         shortcutEvent({ target: editableChild }),
+        true
+      ),
+      false
+    )
+  })
+})
+
+describe('commit bookmark shortcut', () => {
+  it('matches physical B on macOS', () => {
+    assert.equal(
+      isToggleCommitBookmarkShortcut(shortcutEvent({ code: 'KeyB' }), true),
+      true
+    )
+  })
+
+  it('does not match on other platforms or with modifiers', () => {
+    assert.equal(
+      isToggleCommitBookmarkShortcut(shortcutEvent({ code: 'KeyB' }), false),
+      false
+    )
+    assert.equal(
+      isToggleCommitBookmarkShortcut(
+        shortcutEvent({ code: 'KeyB', metaKey: true }),
         true
       ),
       false

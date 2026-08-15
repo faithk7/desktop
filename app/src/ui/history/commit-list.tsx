@@ -209,6 +209,12 @@ interface ICommitListProps {
 
   /** Toggle the read status of a commit. */
   readonly onToggleCommitReadStatus?: (commit: Commit) => void
+
+  /** Shas that the user has bookmarked. */
+  readonly bookmarkedCommitSHAs?: ReadonlySet<string>
+
+  /** Toggle the bookmark status of a commit. */
+  readonly onToggleCommitBookmark?: (commit: Commit) => void
 }
 
 interface ICommitListState {
@@ -338,6 +344,8 @@ export class CommitList extends React.Component<
         preferAbsoluteDates={this.props.preferAbsoluteDates}
         isRead={this.props.readCommitSHAs?.has(commit.sha) === true}
         onToggleReadStatus={this.props.onToggleCommitReadStatus}
+        isBookmarked={this.props.bookmarkedCommitSHAs?.has(commit.sha) === true}
+        onToggleBookmark={this.props.onToggleCommitBookmark}
       />
     )
   }

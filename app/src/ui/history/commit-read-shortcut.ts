@@ -17,6 +17,21 @@ export function isToggleCommitReadShortcut(
   event: CommitReadShortcutEvent,
   isDarwin: boolean = __DARWIN__
 ): boolean {
+  return isToggleCommitShortcut(event, 'KeyV', isDarwin)
+}
+
+export function isToggleCommitBookmarkShortcut(
+  event: CommitReadShortcutEvent,
+  isDarwin: boolean = __DARWIN__
+): boolean {
+  return isToggleCommitShortcut(event, 'KeyB', isDarwin)
+}
+
+function isToggleCommitShortcut(
+  event: CommitReadShortcutEvent,
+  code: 'KeyB' | 'KeyV',
+  isDarwin: boolean
+): boolean {
   return (
     isDarwin &&
     !event.repeat &&
@@ -24,7 +39,7 @@ export function isToggleCommitReadShortcut(
     !event.ctrlKey &&
     !event.metaKey &&
     !event.shiftKey &&
-    event.code === 'KeyV' &&
+    event.code === code &&
     !isEditableTarget(event.target)
   )
 }

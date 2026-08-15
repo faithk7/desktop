@@ -27,6 +27,7 @@ import { RepoRulesInfo } from '../../models/repo-rules'
 import { WorktreeEntry } from '../../models/worktree'
 import { getRepositoryViewState } from '../repository-view-state'
 import { getRepositoryReadCommitSHAs } from '../commit-read-status'
+import { getRepositoryBookmarkedCommitSHAs } from '../commit-bookmarks'
 
 export class RepositoryStateCache {
   private readonly repositoryState = new Map<string, IRepositoryState>()
@@ -364,6 +365,7 @@ function getInitialRepositoryState(repository: Repository): IRepositoryState {
 
   return {
     readCommitSHAs: getRepositoryReadCommitSHAs(repository),
+    bookmarkedCommitSHAs: getRepositoryBookmarkedCommitSHAs(repository),
     commitSelection: {
       shas: [],
       shasInDiff: [],

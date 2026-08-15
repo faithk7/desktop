@@ -37,7 +37,10 @@ import { PullRequestSuggestedNextAction } from '../models/pull-request'
 import { clamp } from '../lib/clamp'
 import { Emoji } from '../lib/emoji'
 import { PopupType } from '../models/popup'
-import { isToggleCommitReadShortcut } from './history/commit-read-shortcut'
+import {
+  isToggleCommitBookmarkShortcut,
+  isToggleCommitReadShortcut,
+} from './history/commit-read-shortcut'
 
 interface IRepositoryViewProps {
   readonly repository: Repository
@@ -383,6 +386,7 @@ export class RepositoryView extends React.Component<
         accounts={this.props.accounts}
         preferAbsoluteDates={this.props.preferAbsoluteDates}
         readCommitSHAs={state.readCommitSHAs}
+        bookmarkedCommitSHAs={state.bookmarkedCommitSHAs}
       />
     )
   }
@@ -705,6 +709,18 @@ export class RepositoryView extends React.Component<
       this.props.state.commitSelection.shas.length > 0
     ) {
       this.compareSidebarRef.current?.toggleSelectedCommitReadStatus()
+      event.preventDefault()
+      return
+    }
+
+    if (
+      isToggleCommitBookmarkShortcut(event) &&
+      selectedSection === RepositorySectionTab.History &&
+      compareState.formState.kind === HistoryTabMode.History &&
+      !compareState.showBranchList &&
+      this.props.state.commitSelection.shas.length > 0
+    ) {
+      this.compareSidebarRef.current?.toggleSelectedCommitBookmarks()
       event.preventDefault()
       return
     }

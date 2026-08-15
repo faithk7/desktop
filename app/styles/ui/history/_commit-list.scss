@@ -231,6 +231,79 @@
     }
   }
 
+  .commit-actions {
+    align-items: center;
+    display: flex;
+    flex: 0 0 40px;
+    flex-direction: row;
+    gap: 0;
+    justify-content: center;
+    margin-left: var(--spacing-half);
+    pointer-events: auto !important;
+  }
+
+  .commit-actions .commit-read-status {
+    margin-left: 0;
+  }
+
+  .commit-bookmark {
+    align-items: center;
+    display: flex;
+    height: 24px;
+    pointer-events: auto !important;
+    justify-content: flex-end;
+    width: 20px;
+  }
+
+  .commit-bookmark-control {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--border-radius);
+    color: var(--text-secondary-color);
+    display: flex;
+    height: 24px;
+    justify-content: flex-end;
+    padding: 0;
+    pointer-events: auto !important;
+    width: 20px;
+    -webkit-appearance: none;
+    appearance: none;
+
+    &:hover,
+    &:focus-visible,
+    &:active {
+      background-color: transparent !important;
+      box-shadow: none !important;
+      color: var(--text-color);
+    }
+
+    &:focus-visible {
+      outline: none;
+
+      .commit-bookmark-icon {
+        filter: drop-shadow(0 0 2px var(--focus-color));
+      }
+    }
+
+    &[aria-pressed='true'] {
+      color: var(--text-color);
+    }
+
+    .commit-bookmark-icon {
+      align-items: center;
+      display: flex;
+      height: 16px;
+      justify-content: center;
+      width: 16px;
+    }
+
+    .octicon {
+      height: 16px;
+      width: 16px;
+    }
+  }
+
   .tool-tip-contents {
     display: none;
   }

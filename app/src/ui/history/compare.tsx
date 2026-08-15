@@ -21,6 +21,7 @@ import { TabBar } from '../tab-bar'
 import { CompareBranchListItem } from './compare-branch-list-item'
 import { FancyTextBox } from '../lib/fancy-text-box'
 import * as octicons from '../octicons/octicons.generated'
+import { Octicon } from '../octicons'
 import { SelectionSource } from '../lib/filter-list'
 import { IMatches } from '../../lib/fuzzy-find'
 import { Ref } from '../lib/ref'
@@ -38,6 +39,7 @@ import { formatNumber } from '../../lib/format-number'
 import { getRepositoryHistoryOrder } from '../../lib/repository-view-state'
 import { Button } from '../lib/button'
 import { AriaLiveContainer } from '../accessibility/aria-live-container'
+import { IMenuItem, showContextualMenu } from '../../lib/menu-item'
 
 interface ICompareSidebarProps {
   readonly repository: Repository
@@ -67,6 +69,7 @@ interface ICompareSidebarProps {
   readonly accounts: ReadonlyArray<Account>
   readonly preferAbsoluteDates: boolean
   readonly readCommitSHAs: ReadonlySet<string>
+  readonly bookmarkedCommitSHAs: ReadonlySet<string>
 }
 interface ICompareSidebarState {
   /**
@@ -85,11 +88,11 @@ interface ICompareSidebarState {
   /** Whether all remaining commits are being loaded and followed. */
   readonly isLoadingAllCommits: boolean
 
-  /** Read-status update announced to screen reader users. */
-  readonly readStatusMessage: string
+  /** History status update announced to screen reader users. */
+  readonly historyStatusMessage: string
 
-  /** Forces repeated read-status messages to be announced. */
-  readonly readStatusChangeSignal: boolean
+  /** Forces repeated history status messages to be announced. */
+  readonly historyStatusChangeSignal: boolean
 }
 
 /** If we're within this many rows from the bottom, load the next history batch. */
@@ -125,8 +128,8 @@ export class CompareSidebar extends React.Component<
       focusedBranch: null,
       isChangingHistoryOrder: false,
       isLoadingAllCommits: false,
-      readStatusMessage: '',
-      readStatusChangeSignal: false,
+      historyStatusMessage: '',
+      historyStatusChangeSignal: false,
     }
   }
 
@@ -253,8 +256,8 @@ export class CompareSidebar extends React.Component<
 
         {showBranchList ? this.renderFilterList() : this.renderCommits()}
         <AriaLiveContainer
-          message={this.state.readStatusMessage}
-          trackedUserInput={this.state.readStatusChangeSignal}
+          message={this.state.historyStatusMessage}
+          trackedUserInput={this.state.historyStatusChangeSignal}
         />
       </div>
     )
@@ -285,13 +288,21 @@ export class CompareSidebar extends React.Component<
       <div className="commit-history-order-selector">
         <label htmlFor="commit-history-order-select">Order</label>
         <Button
-          className="clear-commit-read-status-button"
+          className="clear-commit-history-button button-with-icon"
           size="small"
-          disabled={this.props.readCommitSHAs.size === 0}
-          tooltip="Mark all commits as unread"
-          onClick={this.onClearCommitReadStatus}
+          disabled={
+            this.props.readCommitSHAs.size === 0 &&
+            this.props.bookmarkedCommitSHAs.size === 0
+          }
+          ariaHaspopup="menu"
+          ariaLabel="Clear commit tracking or bookmarks"
+          tooltip="Clear commit tracking or bookmarks"
+          onClick={this.onShowClearMenu}
+          onContextMenu={this.onClearMenuContextMenu}
+          onKeyDown={this.onClearMenuKeyDown}
         >
-          Clear All
+          Clear
+          <Octicon symbol={octicons.chevronDown} />
         </Button>
         <select
           id="commit-history-order-select"
@@ -306,16 +317,61 @@ export class CompareSidebar extends React.Component<
     )
   }
 
+  private onShowClearMenu = () => {
+    const items: ReadonlyArray<IMenuItem> = [
+      {
+        label: 'Clear bookmarks',
+        enabled: this.props.bookmarkedCommitSHAs.size > 0,
+        action: this.onClearCommitBookmarks,
+      },
+      {
+        label: 'Clear tracking',
+        enabled: this.props.readCommitSHAs.size > 0,
+        action: this.onClearCommitReadStatus,
+      },
+    ]
+
+    showContextualMenu(items)
+  }
+
+  private onClearMenuContextMenu = (
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    event.preventDefault()
+    this.onShowClearMenu()
+  }
+
+  private onClearMenuKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>
+  ) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      this.onShowClearMenu()
+    }
+  }
+
   private onClearCommitReadStatus = () => {
     if (this.props.readCommitSHAs.size === 0) {
       return
     }
 
     this.setState(state => ({
-      readStatusMessage: 'Cleared all commit read statuses.',
-      readStatusChangeSignal: !state.readStatusChangeSignal,
+      historyStatusMessage: 'Cleared commit read tracking.',
+      historyStatusChangeSignal: !state.historyStatusChangeSignal,
     }))
     this.props.dispatcher.clearCommitReadStatus(this.props.repository)
+  }
+
+  private onClearCommitBookmarks = () => {
+    if (this.props.bookmarkedCommitSHAs.size === 0) {
+      return
+    }
+
+    this.setState(state => ({
+      historyStatusMessage: 'Cleared all commit bookmarks.',
+      historyStatusChangeSignal: !state.historyStatusChangeSignal,
+    }))
+    this.props.dispatcher.clearCommitBookmarks(this.props.repository)
   }
 
   private onHistoryOrderChanged = async (
@@ -453,9 +509,19 @@ export class CompareSidebar extends React.Component<
             ? this.props.readCommitSHAs
             : undefined
         }
+        bookmarkedCommitSHAs={
+          formState.kind === HistoryTabMode.History
+            ? this.props.bookmarkedCommitSHAs
+            : undefined
+        }
         onToggleCommitReadStatus={
           formState.kind === HistoryTabMode.History
             ? this.onToggleCommitReadStatus
+            : undefined
+        }
+        onToggleCommitBookmark={
+          formState.kind === HistoryTabMode.History
+            ? this.onToggleCommitBookmark
             : undefined
         }
       />
@@ -465,12 +531,25 @@ export class CompareSidebar extends React.Component<
   private onToggleCommitReadStatus = (commit: Commit) => {
     const action = this.props.readCommitSHAs.has(commit.sha) ? 'unread' : 'read'
     this.setState(state => ({
-      readStatusMessage: `Marked ${
+      historyStatusMessage: `Marked ${
         commit.summary || 'empty commit'
       } as ${action}.`,
-      readStatusChangeSignal: !state.readStatusChangeSignal,
+      historyStatusChangeSignal: !state.historyStatusChangeSignal,
     }))
     this.props.dispatcher.toggleCommitReadStatus(this.props.repository, [
+      commit.sha,
+    ])
+  }
+
+  private onToggleCommitBookmark = (commit: Commit) => {
+    const isBookmarked = this.props.bookmarkedCommitSHAs.has(commit.sha)
+    this.setState(state => ({
+      historyStatusMessage: `${
+        isBookmarked ? 'Removed bookmark from' : 'Bookmarked'
+      } ${commit.summary || 'empty commit'}.`,
+      historyStatusChangeSignal: !state.historyStatusChangeSignal,
+    }))
+    this.props.dispatcher.toggleCommitBookmark(this.props.repository, [
       commit.sha,
     ])
   }
@@ -485,7 +564,7 @@ export class CompareSidebar extends React.Component<
     }
 
     const selectedCommitShas = this.props.selectedCommitShas
-    const readStatusMessage =
+    const historyStatusMessage =
       selectedCommitShas.length === 1
         ? this.props.readCommitSHAs.has(selectedCommitShas[0])
           ? 'Marked selected commit as unread.'
@@ -493,10 +572,37 @@ export class CompareSidebar extends React.Component<
         : `Toggled read status for ${selectedCommitShas.length} commits.`
 
     this.setState(state => ({
-      readStatusMessage,
-      readStatusChangeSignal: !state.readStatusChangeSignal,
+      historyStatusMessage,
+      historyStatusChangeSignal: !state.historyStatusChangeSignal,
     }))
     this.props.dispatcher.toggleCommitReadStatus(
+      this.props.repository,
+      selectedCommitShas
+    )
+  }
+
+  public toggleSelectedCommitBookmarks() {
+    if (
+      !this.isHistoryView() ||
+      this.props.compareState.showBranchList ||
+      this.props.selectedCommitShas.length === 0
+    ) {
+      return
+    }
+
+    const selectedCommitShas = this.props.selectedCommitShas
+    const historyStatusMessage =
+      selectedCommitShas.length === 1
+        ? this.props.bookmarkedCommitSHAs.has(selectedCommitShas[0])
+          ? 'Removed bookmark from selected commit.'
+          : 'Bookmarked selected commit.'
+        : `Toggled bookmarks for ${selectedCommitShas.length} commits.`
+
+    this.setState(state => ({
+      historyStatusMessage,
+      historyStatusChangeSignal: !state.historyStatusChangeSignal,
+    }))
+    this.props.dispatcher.toggleCommitBookmark(
       this.props.repository,
       selectedCommitShas
     )

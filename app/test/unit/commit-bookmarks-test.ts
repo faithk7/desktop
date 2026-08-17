@@ -46,10 +46,10 @@ describe('commit bookmarks', () => {
       ['already-bookmarked', 'newly-bookmarked', 'newly-bookmarked']
     )
 
-    assert.deepStrictEqual([...updated], [
-      'stays-bookmarked',
-      'newly-bookmarked',
-    ])
+    assert.deepStrictEqual(
+      [...updated],
+      ['stays-bookmarked', 'newly-bookmarked']
+    )
   })
 
   it('falls back to empty state for malformed storage', () => {

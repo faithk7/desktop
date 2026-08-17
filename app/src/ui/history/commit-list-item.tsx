@@ -295,9 +295,7 @@ export class CommitListItem extends React.PureComponent<
     }
 
     const isBookmarked = this.props.isBookmarked === true
-    const tooltip = isBookmarked
-      ? 'Remove bookmark (B)'
-      : 'Bookmark commit (B)'
+    const tooltip = isBookmarked ? 'Remove bookmark (B)' : 'Bookmark commit (B)'
     const summary =
       this.props.commit.summary.length > 0
         ? this.props.commit.summary
@@ -312,7 +310,9 @@ export class CommitListItem extends React.PureComponent<
         <button
           type="button"
           className="commit-bookmark-control"
-          aria-label={`${isBookmarked ? 'Remove bookmark from' : 'Bookmark'} commit: ${summary}`}
+          aria-label={`${
+            isBookmarked ? 'Remove bookmark from' : 'Bookmark'
+          } commit: ${summary}`}
           aria-pressed={isBookmarked}
           tabIndex={0}
           onClick={this.onBookmarkChanged}

@@ -350,6 +350,25 @@ interface IListProps {
   ) => JSX.Element | string | null
 }
 
+export function getScrollTopForRowNearTop(
+  row: number,
+  rowHeight: IListProps['rowHeight'],
+  rowsAbove: number
+): number {
+  const firstVisibleRow = Math.max(0, row - rowsAbove)
+
+  if (typeof rowHeight === 'number') {
+    return firstVisibleRow * rowHeight
+  }
+
+  let scrollTop = 0
+  for (let index = 0; index < firstVisibleRow; index++) {
+    scrollTop += rowHeight({ index })
+  }
+
+  return scrollTop
+}
+
 interface IListState {
   /** The available height for the list as determined by ResizeObserver */
   readonly height?: number
@@ -996,6 +1015,18 @@ export class List extends React.Component<IListProps, IListState> {
   /** Scroll a row into view without changing list focus or selection. */
   public scrollToRow(row: number) {
     this.scrollRowToVisible(row, false)
+  }
+
+  /** Position a row near the top without changing list focus or selection. */
+  public scrollToRowNearTop(row: number, rowsAbove: number) {
+    this.grid?.scrollToPosition({
+      scrollLeft: 0,
+      scrollTop: getScrollTopForRowNearTop(
+        row,
+        this.props.rowHeight,
+        rowsAbove
+      ),
+    })
   }
 
   public componentDidMount() {

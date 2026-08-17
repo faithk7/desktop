@@ -610,6 +610,13 @@ export class CommitList extends React.Component<
     }
   }
 
+  public scrollToSHANearTop(sha: string) {
+    const row = this.rowForSHA(sha)
+    if (row >= 0) {
+      this.listRef.current?.scrollToRowNearTop(row, 1)
+    }
+  }
+
   public render() {
     const {
       commitSHAs,

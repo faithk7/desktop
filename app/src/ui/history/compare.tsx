@@ -40,6 +40,10 @@ import { getRepositoryHistoryOrder } from '../../lib/repository-view-state'
 import { Button } from '../lib/button'
 import { AriaLiveContainer } from '../accessibility/aria-live-container'
 import { IMenuItem, showContextualMenu } from '../../lib/menu-item'
+import {
+  BookmarkedCommitNavigationDirection,
+  getBookmarkedCommitNavigationTarget,
+} from './commit-bookmark-navigation'
 
 interface ICompareSidebarProps {
   readonly repository: Repository
@@ -419,13 +423,11 @@ export class CompareSidebar extends React.Component<
   }
 
   private renderCommitList() {
-    const { formState, commitSHAs } = this.props.compareState
+    const { formState } = this.props.compareState
     const isOldestFirst =
       formState.kind === HistoryTabMode.History &&
       formState.order === CommitHistoryOrder.OldestFirst
-    const displayCommitSHAs = isOldestFirst
-      ? [...commitSHAs].reverse()
-      : commitSHAs
+    const displayCommitSHAs = this.getDisplayCommitSHAs()
     const canReorder =
       formState.kind === HistoryTabMode.History && !isOldestFirst
 
@@ -606,6 +608,50 @@ export class CompareSidebar extends React.Component<
       this.props.repository,
       selectedCommitShas
     )
+  }
+
+  public navigateBookmarkedCommit(
+    direction: BookmarkedCommitNavigationDirection
+  ) {
+    if (!this.isHistoryView() || this.props.compareState.showBranchList) {
+      return
+    }
+
+    const targetSHA = getBookmarkedCommitNavigationTarget(
+      this.getDisplayCommitSHAs(),
+      this.props.selectedCommitShas,
+      this.props.bookmarkedCommitSHAs,
+      direction
+    )
+    const targetCommit =
+      targetSHA === undefined
+        ? undefined
+        : this.props.commitLookup.get(targetSHA)
+
+    if (targetCommit === undefined) {
+      this.setState(state => ({
+        historyStatusMessage: 'No other bookmarked commits in loaded history.',
+        historyStatusChangeSignal: !state.historyStatusChangeSignal,
+      }))
+      return
+    }
+
+    this.setState(state => ({
+      historyStatusMessage: `Selected bookmarked commit: ${
+        targetCommit.summary || 'empty commit'
+      }.`,
+      historyStatusChangeSignal: !state.historyStatusChangeSignal,
+    }))
+    this.onCommitsSelected([targetCommit], true)
+    this.commitListRef.current?.scrollToSHANearTop(targetCommit.sha)
+  }
+
+  private getDisplayCommitSHAs(): ReadonlyArray<string> {
+    const { formState, commitSHAs } = this.props.compareState
+    return formState.kind === HistoryTabMode.History &&
+      formState.order === CommitHistoryOrder.OldestFirst
+      ? [...commitSHAs].reverse()
+      : commitSHAs
   }
 
   private isHistoryView(props = this.props) {

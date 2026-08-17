@@ -38,6 +38,7 @@ import { clamp } from '../lib/clamp'
 import { Emoji } from '../lib/emoji'
 import { PopupType } from '../models/popup'
 import {
+  getBookmarkedCommitNavigationDirection,
   isToggleCommitBookmarkShortcut,
   isToggleCommitReadShortcut,
 } from './history/commit-read-shortcut'
@@ -701,6 +702,21 @@ export class RepositoryView extends React.Component<
     }
 
     const { compareState, selectedSection } = this.props.state
+    const bookmarkedCommitNavigationDirection =
+      getBookmarkedCommitNavigationDirection(event)
+    if (
+      bookmarkedCommitNavigationDirection !== null &&
+      selectedSection === RepositorySectionTab.History &&
+      compareState.formState.kind === HistoryTabMode.History &&
+      !compareState.showBranchList
+    ) {
+      this.compareSidebarRef.current?.navigateBookmarkedCommit(
+        bookmarkedCommitNavigationDirection
+      )
+      event.preventDefault()
+      return
+    }
+
     if (
       isToggleCommitReadShortcut(event) &&
       selectedSection === RepositorySectionTab.History &&
